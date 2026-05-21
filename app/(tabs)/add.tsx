@@ -20,9 +20,12 @@ import { PeakPicker } from '@/components/PeakPicker';
 
 import { useAuthStore } from '@/stores/auth';
 import { useCreateAscent } from '@/lib/queries/createAscent';
+import { useIdentifyPeak } from '@/lib/queries/identifyPeak';
+import { findNearestPeak } from '@/lib/queries/findNearestPeak';
 import { pickFromCamera, pickFromGallery, type PickedPhoto } from '@/lib/imagePicker';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { usePeaks } from '@/lib/queries/usePeaks';
+import { getCurrentCoords } from '@/lib/location';
 import { COLORS } from '@/constants/theme';
 import type { Peak } from '@/lib/types';
 
@@ -34,7 +37,9 @@ export default function AddScreen() {
   const [peak, setPeak] = useState<Peak | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [notes, setNotes] = useState('');
+  const [suggestion, setSuggestion] = useState<string | null>(null);
   const createAscent = useCreateAscent();
+  const identifyPeak = useIdentifyPeak(peaksQuery.data);
   const [recordedAt] = useState(new Date());
 
   useEffect(() => {
@@ -42,6 +47,114 @@ export default function AddScreen() {
     const match = peaksQuery.data?.find((p) => p.slug === params.peakSlug);
     if (match) setPeak(match);
   }, [params.peakSlug, peaksQuery.data, peak]);
+
+  // EXIF GPS가 있으면 자동으로 인근 봉우리 추천(자동 선택은 하지 않음).
+  useEffect(() => {
+    if (!photo || peak) {
+      setSuggestion(null);
+      return;
+    }
+    if (photo.exifLat == null || photo.exifLng == null || !peaksQuery.data) return;
+    const nearest = findNearestPeak(
+      { latitude: photo.exifLat, longitude: photo.exifLng },
+      peaksQuery.data,
+      { maxMeters: 5_000 }
+    );
+    if (nearest) {
+      setSuggestion(
+        `EXIF GPS 기준 가장 가까운 봉우리는 ${nearest.peak.name_ko} (${formatDistance(nearest.distanceMeters)})`
+      );
+    } else {
+      setSuggestion(null);
+    }
+  }, [photo, peak, peaksQuery.data]);
+
+  const handleSuggestFromExif = () => {
+    if (!photo || !peaksQuery.data) return;
+    if (photo.exifLat == null || photo.exifLng == null) return;
+    const nearest = findNearestPeak(
+      { latitude: photo.exifLat, longitude: photo.exifLng },
+      peaksQuery.data,
+      { maxMeters: 5_000 }
+    );
+    if (nearest) setPeak(nearest.peak);
+  };
+
+  const handleSuggestFromCurrentLocation = async () => {
+    try {
+      const coords = await getCurrentCoords();
+      if (!peaksQuery.data) return;
+      const nearest = findNearestPeak(coords, peaksQuery.data, { maxMeters: 5_000 });
+      if (nearest) {
+        setPeak(nearest.peak);
+      } else {
+        Alert.alert(
+          '근처 봉우리를 찾지 못했습니다',
+          '현재 위치 반경 5km 안에 100대 명산이 없습니다. 직접 선택해 주세요.'
+        );
+      }
+    } catch (err) {
+      Alert.alert(
+        '위치 추천 실패',
+        err instanceof Error ? err.message : '다시 시도해 주세요.'
+      );
+    }
+  };
+
+  const handleIdentifyWithAI = () => {
+    if (!photo) return;
+    const candidates = (() => {
+      if (!peaksQuery.data) return [];
+      const lat = photo.exifLat;
+      const lng = photo.exifLng;
+      if (lat == null || lng == null) return [];
+      const ranked = peaksQuery.data
+        .map((p) => ({
+          peak: p,
+          distance: Math.hypot(p.latitude - lat, p.longitude - lng) * 111_000,
+        }))
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, 5)
+        .filter((c) => c.distance < 10_000);
+      return ranked.map((r) => ({
+        slug: r.peak.slug,
+        name_ko: r.peak.name_ko,
+        name_en: r.peak.name_en,
+        distance_m: r.distance,
+      }));
+    })();
+
+    identifyPeak.mutate(
+      {
+        photoUri: photo.uri,
+        photoMimeType: photo.mimeType,
+        gpsLat: photo.exifLat,
+        gpsLng: photo.exifLng,
+        candidates,
+      },
+      {
+        onSuccess: ({ match, matchedPeak }) => {
+          if (matchedPeak) {
+            setPeak(matchedPeak);
+            Alert.alert(
+              'AI 식별 완료',
+              `${match.name_ko} · 신뢰도 ${(match.confidence * 100).toFixed(0)}%\n\n${match.reason}`
+            );
+          } else {
+            Alert.alert(
+              'AI가 정확히 식별하지 못했습니다',
+              `추정: ${match.name_ko} (신뢰도 ${(match.confidence * 100).toFixed(0)}%)\n\n${match.reason}\n\n수동으로 선택해 주세요.`
+            );
+          }
+        },
+        onError: (err) =>
+          Alert.alert(
+            'AI 식별 실패',
+            err instanceof Error ? err.message : '다시 시도해 주세요.'
+          ),
+      }
+    );
+  };
 
   const handlePickFromCamera = async () => {
     try {
@@ -159,6 +272,63 @@ export default function AddScreen() {
           />
 
           <SectionLabel index="02" label="PEAK · 봉우리" style={{ marginTop: 32 }} />
+          {photo && !peak ? (
+            <View style={{ marginBottom: 12 }}>
+              {suggestion ? (
+                <Pressable
+                  onPress={handleSuggestFromExif}
+                  style={({ pressed }) => ({
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderWidth: 1,
+                    borderColor: COLORS.gold,
+                    backgroundColor: pressed ? COLORS.creamDark : COLORS.cream,
+                    marginBottom: 10,
+                  })}
+                >
+                  <Text
+                    variant="mono"
+                    weight="medium"
+                    style={{ fontSize: 10, letterSpacing: 1.4, color: COLORS.gold }}
+                  >
+                    SUGGESTED · 사진 EXIF
+                  </Text>
+                  <Text
+                    variant="serifKr"
+                    weight="medium"
+                    style={{ fontSize: 14, color: COLORS.navy, marginTop: 4 }}
+                  >
+                    {suggestion}
+                  </Text>
+                  <Text
+                    variant="sans"
+                    style={{ fontSize: 11, color: COLORS.stone, marginTop: 2 }}
+                  >
+                    탭하여 선택
+                  </Text>
+                </Pressable>
+              ) : null}
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label="내 위치로 추천"
+                    variant="outline"
+                    size="sm"
+                    onPress={handleSuggestFromCurrentLocation}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label={identifyPeak.isPending ? 'AI 식별 중…' : 'AI로 식별'}
+                    variant="outline"
+                    size="sm"
+                    disabled={identifyPeak.isPending}
+                    onPress={handleIdentifyWithAI}
+                  />
+                </View>
+              </View>
+            </View>
+          ) : null}
           <Pressable
             onPress={() => setPickerVisible(true)}
             style={({ pressed }) => ({
@@ -441,4 +611,9 @@ function formatRecorded(d: Date): string {
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `${y}년 ${m}월 ${day}일 · ${hh}:${mm}`;
+}
+
+function formatDistance(meters: number): string {
+  if (meters < 1000) return `${Math.round(meters)}m`;
+  return `${(meters / 1000).toFixed(1)}km`;
 }

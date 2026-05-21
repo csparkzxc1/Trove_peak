@@ -5,7 +5,7 @@ import { COLORS } from '@/constants/theme';
 export type ButtonProps = Omit<PressableProps, 'children'> & {
   label: string;
   variant?: 'primary' | 'outline' | 'ghost';
-  size?: 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg';
 };
 
 export function Button({
@@ -16,7 +16,7 @@ export function Button({
   style,
   ...rest
 }: ButtonProps) {
-  const heights = size === 'lg' ? 56 : 48;
+  const heights = size === 'lg' ? 56 : size === 'sm' ? 38 : 48;
   const isPrimary = variant === 'primary';
   const isOutline = variant === 'outline';
 
@@ -50,8 +50,8 @@ export function Button({
           variant="mono"
           weight="medium"
           style={{
-            fontSize: 12,
-            letterSpacing: 2.4,
+            fontSize: size === 'sm' ? 10 : 12,
+            letterSpacing: size === 'sm' ? 1.6 : 2.4,
             color: isPrimary ? COLORS.cream : COLORS.navy,
           }}
         >

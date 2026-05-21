@@ -95,7 +95,7 @@ export default function CollectionScreen() {
 
         <View style={{ marginTop: 28, alignItems: 'center' }}>
           <MonoLabel tone="stone">
-            {`12 OF ${TOTAL_TARGET} CATALOGUED · MORE TO COME`}
+            {`${decorated.length} OF ${TOTAL_TARGET} CATALOGUED`}
           </MonoLabel>
         </View>
       </ScrollView>

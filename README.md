@@ -17,13 +17,15 @@
 - ✅ NativeWind v4 + 디자인 토큰(cream / navy / gold / 세리프 4종)
 - ✅ 폰트 4종 로드 — Noto Serif KR, Cormorant Garamond, Pretendard, JetBrains Mono
 - ✅ Supabase Auth (이메일/패스워드) + 세션 영속화(AsyncStorage)
-- ✅ 도감 메인 — 진행률 블록, 12개 시드 봉우리 그리드(정복/미정복 분기)
+- ✅ 도감 메인 — 진행률 블록, **100대 명산 시드 그리드**(정복/미정복 분기)
 - ✅ 봉우리 상세 — 표고/지역/난이도/좌표, “정복하기” 진입
-- ✅ **정복 등록 수동 흐름** — 카메라/갤러리 사진 선택(EXIF GPS·시각 추출), 봉우리 검색 모달, 메모, Supabase Storage 업로드 + `ascents` insert
+- ✅ **정복 등록 흐름** — 카메라/갤러리 사진 선택(EXIF GPS·시각 추출), 봉우리 검색 모달, 메모, Supabase Storage 업로드 + `ascents` insert
+- ✅ **GPS 자동 봉우리 추천** — EXIF/현재 위치에서 5km 이내 가장 가까운 봉우리 제안(Haversine)
+- ✅ **Claude Vision AI 식별** — Supabase Edge Function `identify-peak`로 봉우리 사진 자동 식별
 - ✅ TanStack Query, Zustand, react-native-svg, react-hook-form, zod
 - ✅ TypeScript 에러 0, 웹 번들 검증 통과
 
-다음 단계는 Phase II 잔여 — GPS 자동 봉우리 매칭, Claude Vision OCR 식별, 누끼/카드 자동 생성, 인스타 공유.
+다음 단계는 Phase II 잔여 — 누끼/카드 자동 생성, 인스타 공유, 친구 비교, PDF 도감 export, 백두대간 30선 시드.
 
 ---
 
@@ -41,7 +43,7 @@ npx expo start
 - Android 에뮬레이터: `a`
 - 웹 미리보기(레이아웃 확인용): `w`
 
-Supabase가 비어 있어도 앱은 동작한다. 시드 봉우리 12개가 로컬 폴백으로 표시되며, 로그인/회원가입 시 안내 알림이 뜬다.
+Supabase가 비어 있어도 앱은 동작한다. 시드 봉우리 **100개(산림청 100대 명산)** 가 로컬 폴백으로 표시되며, 로그인/회원가입 시 안내 알림이 뜬다.
 
 ---
 
@@ -116,23 +118,18 @@ create policy "public ascents readable"
 
 > 비고: 원본 브리프에는 `earthdistance` GIST 인덱스가 포함되어 있으나, Supabase에서 해당 익스텐션은 추가 활성화가 필요하다(Database → Extensions에서 `earthdistance`, `cube` 활성화 후 `create index peaks_geo_idx on peaks using gist (ll_to_earth(latitude, longitude));`). Phase II의 GPS 검색에서 사용 예정.
 
-### 2-3. 시드 데이터 12종
+### 2-3. 시드 데이터 (100대 명산)
 
-```sql
-insert into peaks (slug, name_ko, name_en, elevation_m, latitude, longitude, region, region_short, difficulty, list_korea_100, list_baekdudaegan) values
-  ('hallasan',   '한라산', 'Hallasan',   1947, 33.3617, 126.5292, '제주특별자치도',   '제주', '중', true, false),
-  ('jirisan',    '지리산', 'Jirisan',    1915, 35.3372, 127.7307, '전라남도',         '전남', '상', true, true),
-  ('seoraksan',  '설악산', 'Seoraksan',  1708, 38.1196, 128.4655, '강원특별자치도',   '강원', '상', true, true),
-  ('deokyusan',  '덕유산', 'Deokyusan',  1614, 35.8602, 127.7466, '전북특별자치도',   '전북', '중', true, true),
-  ('taebaeksan', '태백산', 'Taebaeksan', 1567, 37.0998, 128.9165, '강원특별자치도',   '강원', '중', true, true),
-  ('odaesan',    '오대산', 'Odaesan',    1563, 37.7960, 128.5430, '강원특별자치도',   '강원', '중', true, true),
-  ('gayasan',    '가야산', 'Gayasan',    1430, 35.8204, 128.1206, '경상남도',         '경남', '중', true, false),
-  ('sobaeksan',  '소백산', 'Sobaeksan',  1439, 36.9583, 128.4905, '충청북도',         '충북', '중', true, true),
-  ('woraksan',   '월악산', 'Woraksan',   1094, 36.8855, 128.1064, '충청북도',         '충북', '상', true, false),
-  ('bukhansan',  '북한산', 'Bukhansan',   837, 37.6584, 126.9778, '서울특별시',       '서울', '중', true, false),
-  ('gwanaksan',  '관악산', 'Gwanaksan',   632, 37.4423, 126.9628, '서울특별시',       '서울', '하', true, false),
-  ('dobongsan',  '도봉산', 'Dobongsan',   740, 37.6906, 127.0140, '서울특별시',       '서울', '중', true, false);
+100대 명산 시드는 `constants/peaks-seed.ts`에 전부 들어 있다. Supabase에 동일하게 채워 넣으려면 아래 한 줄 스크립트로 SQL을 생성한 뒤 SQL Editor에 붙여넣는다.
+
+```bash
+node --input-type=module -e "import('./constants/peaks-seed.ts').then(m => { \
+  console.log('insert into peaks (slug, name_ko, name_en, elevation_m, latitude, longitude, region, region_short, difficulty, list_korea_100, list_baekdudaegan) values'); \
+  console.log(m.PEAKS_SEED.map(p => \`  ('\${p.slug}','\${p.name_ko}','\${p.name_en}',\${p.elevation_m},\${p.latitude},\${p.longitude},'\${p.region}','\${p.region_short}','\${p.difficulty}',\${p.list_korea_100},\${p.list_baekdudaegan})\`).join(',\n') + ';'); \
+});" > seed-peaks.sql
 ```
+
+좌표는 정상부 근사값(대부분 ±500m 이내). 운영 데이터로 가기 전에 국가지점번호/국토지리정보원과 교차 검증을 권장한다.
 
 ### 2-4. Auth 설정
 
@@ -177,6 +174,29 @@ create policy "public read ascent photos"
   using (bucket_id = 'ascent-photos');
 ```
 
+### 2-6. Edge Function · Claude Vision 식별
+
+`supabase/functions/identify-peak/index.ts`는 사용자가 올린 봉우리 사진을 Claude Vision API에 보내 어느 봉우리인지 식별한다.
+
+1) Anthropic 콘솔에서 API 키 발급
+2) 키를 Supabase Functions 환경 변수로 등록:
+
+```bash
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+# 모델 변경(선택): 기본은 claude-sonnet-4-6
+supabase secrets set CLAUDE_VISION_MODEL=claude-opus-4-7
+```
+
+3) 함수 배포:
+
+```bash
+supabase functions deploy identify-peak
+```
+
+배포 후 앱의 `/add` 화면에서 “AI로 식별” 버튼이 실제로 동작한다. 배포 전에는 호출 시 친절한 에러를 띄운다.
+
+> 비용: 사진 1장당 Sonnet 기준 약 $0.005~0.02. Vision 토큰은 해상도가 높을수록 비싸므로 클라이언트에서 `expo-image-picker`의 `quality: 0.85`로 압축해 보낸다.
+
 ---
 
 ## 3. 디렉터리 구조
@@ -189,7 +209,7 @@ trove-peaks/
 │   │   └── signup.tsx
 │   ├── (tabs)/                   # 로그인 후 메인
 │   │   ├── index.tsx             # 도감
-│   │   ├── add.tsx               # 등록 (Phase II placeholder)
+│   │   ├── add.tsx               # 정복 등록 (사진/봉우리/AI식별)
 │   │   └── profile.tsx           # 프로필
 │   ├── peak/[id].tsx             # 봉우리 상세
 │   ├── _layout.tsx               # 루트 (폰트, Provider, splash)
@@ -203,13 +223,19 @@ trove-peaks/
 ├── lib/
 │   ├── supabase.ts               # 클라이언트 + isSupabaseConfigured 가드
 │   ├── fonts.ts                  # expo-font 매핑
+│   ├── imagePicker.ts            # 카메라/갤러리 + EXIF 파싱
+│   ├── storage.ts                # Supabase Storage 업로드
+│   ├── location.ts               # GPS 권한 + Haversine
+│   ├── base64.ts                 # Uint8Array → base64 (RN/Web 호환)
 │   ├── queries/                  # TanStack Query 훅
 │   └── types.ts
 ├── stores/
 │   └── auth.ts                   # Zustand (Supabase session)
 ├── constants/
-│   ├── peaks-seed.ts             # 12개 시드 (로컬 폴백)
+│   ├── peaks-seed.ts             # 100대 명산 시드 (로컬 폴백)
 │   └── theme.ts                  # COLORS / FONT 토큰
+├── supabase/functions/
+│   └── identify-peak/            # Claude Vision Edge Function (Deno)
 ├── assets/
 │   └── fonts/                    # Pretendard ttf
 └── tailwind.config.js            # cream / navy / gold + serif 4종
@@ -264,11 +290,12 @@ npm run typecheck    # tsc --noEmit
 
 - ✅ 갤러리/카메라 사진 선택 (`expo-image-picker`) + EXIF GPS·시각 자동 반영
 - ✅ Supabase Storage 사진 업로드 + `ascents` insert (수동 봉우리 선택)
-- ⏳ GPS 현재 위치 자동 봉우리 매칭 (`expo-location` + `ll_to_earth` 근접)
-- ⏳ Claude Vision으로 봉우리 OCR / 식별
+- ✅ GPS 현재 위치 자동 봉우리 매칭 (`expo-location` + Haversine)
+- ✅ Claude Vision으로 봉우리 식별 (Edge Function `identify-peak`)
+- ✅ 산림청 100대 명산 풀 데이터(100개) 시드
 - ⏳ 누끼 처리 + 박물관 어감의 인증 카드 자동 생성
 - ⏳ 인스타그램 공유
-- ⏳ 산림청 100대 명산 풀 데이터(100개) 시드 CSV
+- ⏳ 백두대간 30선 별도 컬렉션 뷰
 - ⏳ 친구 비교, PDF 도감 export, 유료 전환
 
 ---
