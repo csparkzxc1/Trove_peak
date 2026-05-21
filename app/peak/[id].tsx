@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import {
   View,
@@ -6,6 +6,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  TextInput,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +20,7 @@ import { AscentCard } from '@/components/AscentCard';
 import { usePeakById } from '@/lib/queries/usePeaks';
 import { useMyAscentForPeak } from '@/lib/queries/useAscents';
 import { useRemoveBackground } from '@/lib/queries/removeBg';
+import { useUpdateAscent, useDeleteAscent } from '@/lib/queries/updateAscent';
 import { captureAndShareCard } from '@/lib/share';
 import { PEAKS_SEED } from '@/constants/peaks-seed';
 import { COLORS } from '@/constants/theme';
@@ -36,6 +38,19 @@ export default function PeakDetailScreen() {
   const [useStudio, setUseStudio] = useState(false);
   const [aspect, setAspect] = useState<'1:1' | '9:16'>('1:1');
   const removeBg = useRemoveBackground();
+  const updateAscent = useUpdateAscent();
+  const deleteAscent = useDeleteAscent();
+  const [editOpen, setEditOpen] = useState(false);
+  const [editNotes, setEditNotes] = useState('');
+  const [editPublic, setEditPublic] = useState(true);
+
+  useEffect(() => {
+    if (ascent) {
+      setEditNotes(ascent.notes ?? '');
+      setEditPublic(ascent.is_public);
+    }
+  }, [ascent]);
+
   const { width: winWidth } = useWindowDimensions();
   // 스토리(9:16)는 세로가 훨씬 기니 미리보기 폭을 더 줄여 줘야 화면 안에 들어온다.
   const cardWidth = Math.min(winWidth - 48, aspect === '9:16' ? 360 : 520);
@@ -50,6 +65,53 @@ export default function PeakDetailScreen() {
     } finally {
       setSharing(false);
     }
+  };
+
+  const handleSaveEdit = () => {
+    if (!ascent) return;
+    updateAscent.mutate(
+      {
+        ascentId: ascent.id,
+        notes: editNotes.trim() ? editNotes.trim() : null,
+        isPublic: editPublic,
+        ascendedAt: new Date(ascent.ascended_at),
+      },
+      {
+        onSuccess: () => {
+          setEditOpen(false);
+          Alert.alert('저장되었습니다');
+        },
+        onError: (e) =>
+          Alert.alert('저장 실패', e instanceof Error ? e.message : '다시 시도해 주세요.'),
+      }
+    );
+  };
+
+  const handleDelete = () => {
+    if (!ascent || !peak) return;
+    Alert.alert(
+      '기록을 삭제하시겠습니까?',
+      `${peak.name_ko}의 기록이 도감에서 영구 삭제됩니다. 사진 원본은 Storage에 남아 있을 수 있습니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: () => {
+            deleteAscent.mutate(ascent.id, {
+              onSuccess: () => {
+                router.back();
+              },
+              onError: (e) =>
+                Alert.alert(
+                  '삭제 실패',
+                  e instanceof Error ? e.message : '다시 시도해 주세요.'
+                ),
+            });
+          },
+        },
+      ]
+    );
   };
 
   const handleRemoveBg = () => {
@@ -340,8 +402,135 @@ export default function PeakDetailScreen() {
                   lineHeight: 16,
                 }}
               >
-                카드는 1:1 정사각형으로 저장됩니다. 인스타그램·메시지 어디에든 어울립니다.
+                카드는 인스타그램·메시지 어디에든 어울립니다.
               </Text>
+
+              <Divider style={{ marginTop: 32 }} />
+
+              <View style={{ marginTop: 24 }}>
+                <Pressable
+                  onPress={() => setEditOpen((v) => !v)}
+                  hitSlop={8}
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <MonoLabel tone="stone">EDIT · 기록 편집</MonoLabel>
+                  <Text
+                    variant="mono"
+                    weight="medium"
+                    style={{ fontSize: 11, letterSpacing: 1.4, color: COLORS.navy }}
+                  >
+                    {editOpen ? '닫기 −' : '펼치기 +'}
+                  </Text>
+                </Pressable>
+
+                {editOpen ? (
+                  <View style={{ marginTop: 16, gap: 14 }}>
+                    <View>
+                      <MonoLabel tone="stone">NOTES · 메모</MonoLabel>
+                      <View
+                        style={{
+                          marginTop: 8,
+                          borderWidth: 1,
+                          borderColor: COLORS.line,
+                          padding: 12,
+                          minHeight: 96,
+                        }}
+                      >
+                        <TextInput
+                          value={editNotes}
+                          onChangeText={setEditNotes}
+                          placeholder="이 봉우리에서의 한 줄 메모"
+                          placeholderTextColor={COLORS.stoneLight}
+                          multiline
+                          textAlignVertical="top"
+                          style={{
+                            fontFamily: 'Pretendard-Regular',
+                            fontSize: 14,
+                            color: COLORS.ink,
+                            minHeight: 72,
+                          }}
+                        />
+                      </View>
+                    </View>
+
+                    <Pressable
+                      onPress={() => setEditPublic((v) => !v)}
+                      style={({ pressed }) => ({
+                        borderWidth: 1,
+                        borderColor: editPublic ? COLORS.navy : COLORS.line,
+                        padding: 12,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: pressed ? COLORS.creamDark : 'transparent',
+                      })}
+                    >
+                      <Text
+                        variant="serifKr"
+                        weight="medium"
+                        style={{ fontSize: 14, color: COLORS.navy }}
+                      >
+                        {editPublic ? '다른 등산인이 볼 수 있음' : '나만 보는 비공개'}
+                      </Text>
+                      <View
+                        style={{
+                          width: 44,
+                          height: 26,
+                          borderRadius: 13,
+                          backgroundColor: editPublic ? COLORS.navy : COLORS.line,
+                          padding: 3,
+                          justifyContent: 'center',
+                          alignItems: editPublic ? 'flex-end' : 'flex-start',
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 20,
+                            height: 20,
+                            borderRadius: 10,
+                            backgroundColor: COLORS.cream,
+                          }}
+                        />
+                      </View>
+                    </Pressable>
+
+                    <Button
+                      label={updateAscent.isPending ? '저장 중…' : '변경 사항 저장'}
+                      disabled={updateAscent.isPending}
+                      onPress={handleSaveEdit}
+                    />
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={{ marginTop: 24, alignItems: 'center' }}>
+                <Pressable
+                  onPress={handleDelete}
+                  disabled={deleteAscent.isPending}
+                  hitSlop={8}
+                  style={({ pressed }) => ({
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    opacity: pressed ? 0.6 : 1,
+                  })}
+                >
+                  <Text
+                    variant="mono"
+                    weight="medium"
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: 1.6,
+                      color: COLORS.stoneLight,
+                    }}
+                  >
+                    {deleteAscent.isPending ? '삭제 중…' : '이 기록 삭제'}
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           ) : (
             <View style={{ marginTop: 32 }}>

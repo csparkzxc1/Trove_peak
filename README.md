@@ -30,10 +30,13 @@
 - ✅ **누끼(스튜디오 모드)** — remove.bg Edge Function으로 배경 분리 → 어두운 박물관 카드 변형
 - ✅ **인스타 스토리(9:16) 카드** — 피드(1:1) ↔ 스토리(9:16) 토글, 4 변형 조합(피드·스토리 × 클래식·스튜디오)
 - ✅ 닉네임 일관성 — `profiles` 테이블을 진실의 원천으로 (트리거가 채운 `climber-xxxx`도 노출)
+- ✅ **데이터 정합성 검증** — `npm run validate:peaks` (slug 중복·좌표·표고·지역·카운트 검사)
+- ✅ **한국 지도 뷰** — 도감 메인의 GRID/MAP 토글, 정복(gold) vs 미정복(stone) 분기, 탭 → 봉우리 상세
+- ✅ **기록 편집·삭제** — 봉우리 상세에서 메모·공개 토글 편집, 삭제 시 확인 알림
 - ✅ TanStack Query, Zustand, react-native-svg, react-hook-form, zod
 - ✅ TypeScript 에러 0, 웹 번들 검증 통과
 
-앱은 **무료 베이스**로 운영한다(과금/구독 없음). 다음 후보 — 데이터 정합성 검증, 한국 지도 뷰, 정복 기록 편집/삭제.
+앱은 **무료 베이스**로 운영한다(과금/구독 없음). Phase II는 사실상 마감 상태이며 다음은 운영 다듬기 — 사진 ascended_at 편집, 한국 지도 outline 보강, 봉우리 좌표 국토지리정보원 교차 검증, 도감 비어 있을 때의 온보딩.
 
 ---
 
@@ -384,7 +387,8 @@ npm run start        # expo start
 npm run ios          # iOS 시뮬레이터
 npm run android      # Android 에뮬레이터
 npm run web          # 웹 미리보기
-npm run typecheck    # tsc --noEmit
+npm run typecheck       # tsc --noEmit
+npm run validate:peaks  # 시드 정합성 검사 (slug·좌표·표고·카운트)
 ```
 
 ---
@@ -403,8 +407,11 @@ npm run typecheck    # tsc --noEmit
 - ✅ 친구 비교 (닉네임 검색 + 공개 컬렉션 요약 뷰)
 - ✅ 공개/비공개 토글 (등록 시 선택)
 - ✅ 누끼 처리 (remove.bg Edge Function, 옵셔널)
+- ✅ 데이터 정합성 검증 (`npm run validate:peaks` 스크립트)
+- ✅ 한국 지도 뷰 (도감 메인 MAP 모드)
+- ✅ 정복 기록 편집/삭제
 - ❌ 유료 전환 — 무료 베이스로 운영
-- ⏳ 데이터 정합성 (좌표·표고 국토지리정보원 검증 스크립트)
+- ⏳ 좌표 국토지리정보원 교차 검증, 사진/촬영일 편집, 온보딩
 
 ---
 

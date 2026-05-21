@@ -1,5 +1,11 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, ActivityIndicator, Pressable } from 'react-native';
+import {
+  View,
+  ScrollView,
+  ActivityIndicator,
+  Pressable,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/Text';
@@ -7,6 +13,7 @@ import { MonoLabel } from '@/components/ui/MonoLabel';
 import { Divider } from '@/components/ui/Divider';
 import { BrandWordmark } from '@/components/BrandWordmark';
 import { PeakCard } from '@/components/PeakCard';
+import { PeakMap } from '@/components/PeakMap';
 import { ProgressBlock } from '@/components/ProgressBlock';
 
 import { usePeaks, decoratePeaksWithAscents } from '@/lib/queries/usePeaks';
@@ -15,11 +22,15 @@ import { TOTAL_TARGET } from '@/constants/peaks-seed';
 import { COLORS } from '@/constants/theme';
 
 type ListFilter = 'korea_100' | 'baekdudaegan';
+type ViewMode = 'grid' | 'map';
 
 export default function CollectionScreen() {
   const peaksQuery = usePeaks();
   const ascentsQuery = useMyAscents();
   const [filter, setFilter] = useState<ListFilter>('korea_100');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const { width: winWidth } = useWindowDimensions();
+  const mapWidth = Math.min(winWidth - 40, 520);
 
   const decorated = useMemo(() => {
     const peaks = peaksQuery.data ?? [];
@@ -73,6 +84,10 @@ export default function CollectionScreen() {
           <FilterTabs value={filter} onChange={setFilter} />
         </View>
 
+        <View style={{ marginTop: 14 }}>
+          <ViewModeTabs value={viewMode} onChange={setViewMode} />
+        </View>
+
         <View style={{ marginTop: 22, marginBottom: 14 }}>
           <View
             style={{
@@ -99,13 +114,19 @@ export default function CollectionScreen() {
           <Divider style={{ marginTop: 14 }} />
         </View>
 
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6 }}>
-          {filtered.map((peak, index) => (
-            <View key={peak.id} style={{ width: '50%', padding: 6 }}>
-              <PeakCard peak={peak} index={index} />
-            </View>
-          ))}
-        </View>
+        {viewMode === 'grid' ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6 }}>
+            {filtered.map((peak, index) => (
+              <View key={peak.id} style={{ width: '50%', padding: 6 }}>
+                <PeakCard peak={peak} index={index} />
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View>
+            <PeakMap peaks={filtered} width={mapWidth} />
+          </View>
+        )}
 
         <View style={{ marginTop: 28, alignItems: 'center' }}>
           <MonoLabel tone="stone">
@@ -114,6 +135,60 @@ export default function CollectionScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function ViewModeTabs({
+  value,
+  onChange,
+}: {
+  value: ViewMode;
+  onChange: (next: ViewMode) => void;
+}) {
+  const tabs: { id: ViewMode; label: string }[] = [
+    { id: 'grid', label: 'GRID · 도감' },
+    { id: 'map', label: 'MAP · 지도' },
+  ];
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        borderWidth: 1,
+        borderColor: COLORS.line,
+      }}
+    >
+      {tabs.map((tab) => {
+        const active = tab.id === value;
+        return (
+          <Pressable
+            key={tab.id}
+            onPress={() => onChange(tab.id)}
+            style={({ pressed }) => ({
+              flex: 1,
+              paddingVertical: 9,
+              alignItems: 'center',
+              backgroundColor: active
+                ? COLORS.navy
+                : pressed
+                  ? COLORS.creamDark
+                  : 'transparent',
+            })}
+          >
+            <Text
+              variant="mono"
+              weight="medium"
+              style={{
+                fontSize: 10,
+                letterSpacing: 1.4,
+                color: active ? COLORS.cream : COLORS.navy,
+              }}
+            >
+              {tab.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
