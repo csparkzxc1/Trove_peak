@@ -11,6 +11,7 @@ import '../global.css';
 import { FONT_MAP } from '@/lib/fonts';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth';
+import { configurePurchases, loginPurchases, logoutPurchases } from '@/lib/iap';
 import { COLORS } from '@/constants/theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -29,6 +30,11 @@ export default function RootLayout() {
   const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
+    // RevenueCat SDK 초기화. 키가 없거나 Expo Go면 no-op.
+    configurePurchases();
+  }, []);
+
+  useEffect(() => {
     let active = true;
     if (!isSupabaseConfigured) {
       setInitializing(false);
@@ -42,9 +48,12 @@ export default function RootLayout() {
       setSession(data.session);
       setInitializing(false);
       setAuthReady(true);
+      if (data.session?.user.id) loginPurchases(data.session.user.id);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (session?.user.id) loginPurchases(session.user.id);
+      else logoutPurchases();
     });
     return () => {
       active = false;

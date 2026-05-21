@@ -33,7 +33,7 @@
 - ✅ **데이터 정합성 검증** — `npm run validate:peaks` (slug 중복·좌표·표고·지역·카운트 검사)
 - ✅ **한국 지도 뷰** — 도감 메인의 GRID/MAP 토글, 정복(gold) vs 미정복(stone) 분기, 탭 → 봉우리 상세
 - ✅ **기록 편집·삭제** — 봉우리 상세에서 메모·공개 토글 편집, 삭제 시 확인 알림
-- ✅ **TROVE PLUS 게이팅** — `profiles.is_pro` 기반 엔타이틀먼트, Paywall 모달, 클라이언트·Edge Function 양쪽에서 검증
+- ✅ **TROVE PLUS 게이팅 + 결제 코드** — `profiles.is_pro` 엔타이틀먼트, react-native-purchases SDK 연결, 동적 가격 Paywall, RevenueCat 웹훅 Edge Function
 - ✅ TanStack Query, Zustand, react-native-svg, react-hook-form, zod
 - ✅ TypeScript 에러 0, 웹 번들 검증 통과
 
@@ -351,17 +351,52 @@ create trigger profiles_prevent_pro_self_update
 - `identify-peak` / `remove-bg` Edge Function 모두 사용자 JWT로 `profiles.is_pro`를 조회해 false면 **402 Payment Required**로 거절
 - 클라이언트 우회 시도 차단
 
-**RevenueCat 통합 (다음 단계):**
+**RevenueCat 통합 — 출시 체크리스트:**
 
-1. RevenueCat 프로젝트 + iOS/Android 앱 등록 (https://app.revenuecat.com)
-2. App Store Connect / Play Console에 구독·일회성 IAP 상품 등록
-   (제안: `trove_plus_monthly`, `trove_plus_yearly`, `trove_plus_lifetime`)
-3. `react-native-purchases` SDK 설치 + `RootLayout`에서 `Purchases.configure({ apiKey })`
-4. `app/paywall.tsx`의 `handlePurchase`를 `Purchases.purchasePackage(...)`로 교체
-5. RevenueCat Webhook → Supabase Edge Function `revenuecat-webhook` (service_role)
-   에서 `profiles.is_pro` 와 `pro_expires_at` 갱신
+본 저장소엔 SDK 설치·Paywall·웹훅 Edge Function까지 모두 들어 있다. 사용자가 외부 콘솔에서 끝내야 할 작업만 남는다.
 
-웹훅 함수는 본 저장소엔 미포함(상품 ID·시크릿이 환경별로 다르므로 출시 직전에 추가).
+1) **App Store Connect / Play Console**
+   - 두 콘솔에 다음 IAP 상품 ID로 구독·일회성 상품 등록:
+     - `trove_plus_monthly`  (자동갱신 월간)
+     - `trove_plus_yearly`   (자동갱신 연간)
+     - `trove_plus_lifetime` (일회성 영구)
+   - 가격은 RevenueCat이 자동 동기화하므로 콘솔에서만 정한다. Paywall은 priceString을 그대로 보여 준다.
+   - 첨부 사항: 개인정보 처리방침/이용약관 URL, 환불 정책
+
+2) **RevenueCat 프로젝트** (https://app.revenuecat.com)
+   - Project Settings → Apps → iOS 앱(번들 ID `com.trove.peaks`) + Android 앱(`com.trove.peaks`) 등록
+   - 각 앱에 위 상품을 Product로 import
+   - **Offering**을 하나 만들고 (`default`) 위 3개 상품을 packages로 묶음:
+     `monthly` → trove_plus_monthly, `annual` → trove_plus_yearly, `lifetime` → trove_plus_lifetime
+   - Project Settings → API Keys에서 iOS/Android 공개 키를 `.env.local`에 복사:
+     ```
+     EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=appl_...
+     EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=goog_...
+     ```
+
+3) **웹훅 Edge Function 배포** (Supabase)
+   ```bash
+   supabase secrets set REVENUECAT_WEBHOOK_SECRET=$(openssl rand -hex 32)
+   supabase secrets set SUPABASE_SERVICE_ROLE_KEY=... # Settings → API
+   supabase functions deploy revenuecat-webhook --no-verify-jwt
+   ```
+   RevenueCat Project Settings → Integrations → Webhooks:
+   - URL: `https://<project-ref>.functions.supabase.co/revenuecat-webhook`
+   - Authorization Header value: `Bearer <REVENUECAT_WEBHOOK_SECRET>`
+   - 처리: `INITIAL_PURCHASE`, `RENEWAL`, `PRODUCT_CHANGE`, `UNCANCELLATION`, `NON_RENEWING_PURCHASE` → `is_pro=true`, `EXPIRATION` → `is_pro=false`
+
+4) **Dev Build / EAS Build**
+   - `react-native-purchases`는 네이티브 모듈이라 Expo Go에선 동작 안 함. Paywall이 안내 노트를 띄움
+   - `eas build --profile development` 후 Dev Client에서 IAP 실동작
+   - TestFlight / 내부 테스트로 sandbox 결제 → RevenueCat 이벤트 → 웹훅 → Supabase 반영을 끝까지 확인
+
+5) **개발 중 수동 Plus 토글**
+   결제 통합 전에 기능 잠금만 풀어 보고 싶다면 SQL Editor에서:
+   ```sql
+   update profiles set is_pro = true, pro_expires_at = null
+     where nickname = '내닉네임';
+   ```
+   (auth.uid()가 NULL이라 잠금 트리거가 무시한다.)
 
 ---
 
@@ -407,7 +442,9 @@ trove-peaks/
 │   ├── peaks-seed.ts             # 100대 명산 시드 (로컬 폴백)
 │   └── theme.ts                  # COLORS / FONT 토큰
 ├── supabase/functions/
-│   └── identify-peak/            # Claude Vision Edge Function (Deno)
+│   ├── identify-peak/            # Claude Vision (Plus 게이팅)
+│   ├── remove-bg/                # remove.bg 누끼 (Plus 게이팅)
+│   └── revenuecat-webhook/       # IAP 이벤트 → profiles.is_pro 갱신
 ├── assets/
 │   └── fonts/                    # Pretendard ttf
 └── tailwind.config.js            # cream / navy / gold + serif 4종
@@ -476,7 +513,8 @@ npm run validate:peaks  # 시드 정합성 검사 (slug·좌표·표고·카운�
 - ✅ 데이터 정합성 검증 (`npm run validate:peaks` 스크립트)
 - ✅ 한국 지도 뷰 (도감 메인 MAP 모드)
 - ✅ 정복 기록 편집/삭제
-- 🔜 결제 통합 (RevenueCat) — Paywall UI/엔타이틀먼트 게이팅 완료, IAP 상품 연결 대기
+- ✅ 결제 통합 코드 — react-native-purchases SDK 연결, Paywall 동적 가격, revenuecat-webhook Edge Function
+- 🔜 외부 콘솔 작업 — ASC/Play Console IAP 상품 등록 + RevenueCat 프로젝트·웹훅 연결 (README §2-9 체크리스트)
 - ⏳ 좌표 국토지리정보원 교차 검증, 사진/촬영일 편집, 온보딩
 
 ---

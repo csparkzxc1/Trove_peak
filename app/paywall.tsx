@@ -1,19 +1,28 @@
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { Text } from '@/components/ui/Text';
-import { Button } from '@/components/ui/Button';
 import { MonoLabel } from '@/components/ui/MonoLabel';
 import { Divider } from '@/components/ui/Divider';
 import { BrandWordmark } from '@/components/BrandWordmark';
+import {
+  isIapAvailable,
+  getOfferings,
+  purchasePackage,
+  type IapOfferings,
+  type IapPackage,
+} from '@/lib/iap';
 import { COLORS } from '@/constants/theme';
 
-// Plus 가격은 출시 시점에 ASC/Play Console의 product_id로 동기화한다.
-// 여기 표기는 placeholder.
-const PRICE_MONTHLY = '₩2,900';
-const PRICE_YEARLY = '₩19,000';
-const PRICE_LIFETIME = '₩39,000';
+// IAP가 준비되지 않은 빌드(Expo Go·키 미설정)에서 보이는 placeholder.
+const FALLBACK = {
+  monthly: '₩2,900/월',
+  yearly: '₩19,000/년',
+  lifetime: '₩39,000',
+};
 
 const BENEFITS: { title: string; sub: string }[] = [
   {
@@ -35,11 +44,60 @@ const BENEFITS: { title: string; sub: string }[] = [
 ];
 
 export default function PaywallScreen() {
-  const handlePurchase = (tier: string) => {
-    Alert.alert(
-      `${tier} · 결제 통합 준비 중`,
-      '실제 결제는 RevenueCat + App Store/Play Console 상품이 활성화되면 동작합니다.\n\n출시 전엔 Supabase 콘솔에서 profiles.is_pro 를 직접 true로 토글해 테스트할 수 있습니다.'
-    );
+  const queryClient = useQueryClient();
+  const [offerings, setOfferings] = useState<IapOfferings | null>(null);
+  const [loadingOfferings, setLoadingOfferings] = useState(isIapAvailable);
+  const [purchasing, setPurchasing] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isIapAvailable) return;
+    let active = true;
+    getOfferings().then((data) => {
+      if (!active) return;
+      setOfferings(data);
+      setLoadingOfferings(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handlePurchase = async (key: 'monthly' | 'yearly' | 'lifetime') => {
+    if (!isIapAvailable) {
+      Alert.alert(
+        '결제 통합 준비 중',
+        'react-native-purchases SDK는 Expo Dev Build/EAS Build에서만 동작합니다.\n\n출시 전엔 Supabase 콘솔에서 profiles.is_pro=true로 직접 토글해 테스트할 수 있습니다.'
+      );
+      return;
+    }
+    const pkg = offerings?.[key] ?? null;
+    if (!pkg) {
+      Alert.alert(
+        '상품을 찾지 못했습니다',
+        'RevenueCat에 해당 IAP 상품이 등록되지 않았거나 Offering에 추가되지 않았습니다. README §2-9 참조.'
+      );
+      return;
+    }
+    try {
+      setPurchasing(key);
+      await purchasePackage(pkg);
+      // 결제 성공 → RevenueCat 웹훅이 profiles.is_pro를 갱신. 잠시 후 invalidate.
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['my-profile'] });
+      }, 1500);
+      Alert.alert(
+        'TROVE PLUS 가입 완료',
+        '도감의 모든 기능이 열렸습니다. 잠시 후 자동으로 반영됩니다.'
+      );
+      router.back();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '다시 시도해 주세요.';
+      if (!/cancel/i.test(message)) {
+        Alert.alert('결제를 완료하지 못했습니다', message);
+      }
+    } finally {
+      setPurchasing(null);
+    }
   };
 
   return (
@@ -153,27 +211,67 @@ export default function PaywallScreen() {
 
           <Divider style={{ marginTop: 36, backgroundColor: COLORS.gold }} />
 
-          <View style={{ marginTop: 22, gap: 12 }}>
-            <PriceRow
-              tier="LIFETIME · 평생"
-              price={PRICE_LIFETIME}
-              recommended
-              note="한 번만 결제하고 끝"
-              onPress={() => handlePurchase('Lifetime')}
-            />
-            <PriceRow
-              tier="YEARLY · 연간"
-              price={`${PRICE_YEARLY}/년`}
-              note="월 환산 ₩1,583 · 약 45% 절약"
-              onPress={() => handlePurchase('Yearly')}
-            />
-            <PriceRow
-              tier="MONTHLY · 월간"
-              price={`${PRICE_MONTHLY}/월`}
-              note="가볍게 시작"
-              onPress={() => handlePurchase('Monthly')}
-            />
-          </View>
+          {loadingOfferings ? (
+            <View style={{ marginTop: 28, alignItems: 'center' }}>
+              <ActivityIndicator color={COLORS.gold} />
+            </View>
+          ) : (
+            <View style={{ marginTop: 22, gap: 12 }}>
+              <PriceRow
+                tier="LIFETIME · 평생"
+                price={offerings?.lifetime?.product.priceString ?? FALLBACK.lifetime}
+                note="한 번만 결제하고 끝"
+                recommended
+                busy={purchasing === 'lifetime'}
+                disabled={purchasing !== null}
+                onPress={() => handlePurchase('lifetime')}
+              />
+              <PriceRow
+                tier="YEARLY · 연간"
+                price={
+                  offerings?.yearly?.product.priceString ?? FALLBACK.yearly
+                }
+                note="월 환산 ₩1,583 · 약 45% 절약"
+                busy={purchasing === 'yearly'}
+                disabled={purchasing !== null}
+                onPress={() => handlePurchase('yearly')}
+              />
+              <PriceRow
+                tier="MONTHLY · 월간"
+                price={
+                  offerings?.monthly?.product.priceString ?? FALLBACK.monthly
+                }
+                note="가볍게 시작"
+                busy={purchasing === 'monthly'}
+                disabled={purchasing !== null}
+                onPress={() => handlePurchase('monthly')}
+              />
+            </View>
+          )}
+
+          {!isIapAvailable ? (
+            <View
+              style={{
+                marginTop: 22,
+                padding: 14,
+                borderWidth: 1,
+                borderColor: '#3A4B62',
+              }}
+            >
+              <MonoLabel tone="gold">DEV NOTE</MonoLabel>
+              <Text
+                variant="sans"
+                style={{
+                  marginTop: 6,
+                  fontSize: 11,
+                  color: '#9DA4AC',
+                  lineHeight: 16,
+                }}
+              >
+                이 빌드는 결제 SDK가 활성화되지 않았습니다. Dev Build / EAS Build에서 실제 IAP가 동작하며, 그 전까지는 Supabase 콘솔에서 profiles.is_pro를 토글해 테스트할 수 있습니다.
+              </Text>
+            </View>
+          ) : null}
 
           <Text
             variant="sans"
@@ -199,22 +297,28 @@ function PriceRow({
   price,
   note,
   recommended,
+  busy,
+  disabled,
   onPress,
 }: {
   tier: string;
   price: string;
   note: string;
   recommended?: boolean;
+  busy?: boolean;
+  disabled?: boolean;
   onPress: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       style={({ pressed }) => ({
         borderWidth: 1,
         borderColor: recommended ? COLORS.gold : '#3A4B62',
         padding: 18,
         backgroundColor: pressed ? '#1A3656' : 'transparent',
+        opacity: disabled && !busy ? 0.45 : 1,
       })}
     >
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -252,7 +356,7 @@ function PriceRow({
           marginTop: 6,
         }}
       >
-        {price}
+        {busy ? '결제 진행 중…' : price}
       </Text>
       <Text
         variant="sans"
