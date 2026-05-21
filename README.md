@@ -25,10 +25,11 @@
 - ✅ **인증 카드 + 공유** — 1:1 정사각형 박물관 어감 카드를 `react-native-view-shot`으로 캡처해 시스템 공유 시트(인스타·메시지)로 전송
 - ✅ **백두대간 30선 필터** — 도감 메인에서 100대 명산(100) / 백두대간(30) 전환
 - ✅ **PDF 도감 export** — `expo-print`로 표지·목차·봉우리 페이지 A4 PDF 생성 후 시스템 공유
+- ✅ **친구 비교** — 닉네임 검색 + `collection_summary` 뷰로 우리 둘 다·친구만·나만 분리
 - ✅ TanStack Query, Zustand, react-native-svg, react-hook-form, zod
 - ✅ TypeScript 에러 0, 웹 번들 검증 통과
 
-다음 단계는 Phase II 잔여 — 봉우리 누끼 처리(remove.bg/WASM), 친구 비교, 유료 전환.
+다음 단계는 Phase II 잔여 — 봉우리 누끼 처리(remove.bg/WASM), 유료 전환.
 
 ---
 
@@ -177,7 +178,80 @@ create policy "public read ascent photos"
   using (bucket_id = 'ascent-photos');
 ```
 
-### 2-6. Edge Function · Claude Vision 식별
+### 2-6. 친구 비교 (profiles + collection_summary)
+
+닉네임 검색과 친구의 컬렉션 비교를 위해 공개 `profiles` 테이블과 `collection_summary` 뷰가 필요하다. SQL Editor에 그대로 실행:
+
+```sql
+create table profiles (
+  id uuid primary key references auth.users on delete cascade,
+  nickname text unique not null,
+  created_at timestamptz default now()
+);
+
+create index profiles_nickname_lower_idx on profiles (lower(nickname));
+
+alter table profiles enable row level security;
+
+create policy "profiles readable by all"
+  on profiles for select using (true);
+
+create policy "own profile mutable"
+  on profiles for all
+  using (auth.uid() = id)
+  with check (auth.uid() = id);
+
+-- 회원가입 시 user_metadata.nickname을 그대로 가져와 profiles에 채움
+create or replace function handle_new_user()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+  insert into profiles (id, nickname)
+  values (
+    new.id,
+    coalesce(
+      new.raw_user_meta_data->>'nickname',
+      'climber-' || substring(new.id::text from 1 for 8)
+    )
+  );
+  return new;
+end;
+$$;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function handle_new_user();
+
+-- 공개 ascent만 집계한 컬렉션 요약 뷰 (사진·노트는 노출 안 함)
+create or replace view collection_summary as
+  select
+    pr.id   as user_id,
+    pr.nickname,
+    coalesce(
+      array_agg(a.peak_id) filter (where a.id is not null and a.is_public = true),
+      array[]::uuid[]
+    )       as collected_peak_ids,
+    count(a.id) filter (where a.is_public = true) as collected_count
+  from profiles pr
+  left join ascents a on a.user_id = pr.id
+  group by pr.id, pr.nickname;
+
+grant select on collection_summary to anon, authenticated;
+```
+
+> 기존 사용자가 있다면 한 번 백필이 필요하다:
+> ```sql
+> insert into profiles (id, nickname)
+> select id, coalesce(raw_user_meta_data->>'nickname', 'climber-' || substring(id::text from 1 for 8))
+>   from auth.users
+>   on conflict do nothing;
+> ```
+
+이 시점부터 `ascents.is_public`은 새 기록 기본값이 `true`로 들어간다(친구 비교가 의미 있으려면 공개 ascent가 필요). 사용자가 비공개로 두고 싶다면 향후 UI에서 토글 노출.
+
+### 2-7. Edge Function · Claude Vision 식별
 
 `supabase/functions/identify-peak/index.ts`는 사용자가 올린 봉우리 사진을 Claude Vision API에 보내 어느 봉우리인지 식별한다.
 
@@ -215,6 +289,7 @@ trove-peaks/
 │   │   ├── add.tsx               # 정복 등록 (사진/봉우리/AI식별)
 │   │   └── profile.tsx           # 프로필
 │   ├── peak/[id].tsx             # 봉우리 상세
+│   ├── friend/[nickname].tsx     # 친구 도감·비교
 │   ├── _layout.tsx               # 루트 (폰트, Provider, splash)
 │   └── index.tsx                 # auth 분기
 ├── components/
@@ -304,8 +379,9 @@ npm run typecheck    # tsc --noEmit
 - ✅ 인스타그램·시스템 공유 시트 (expo-sharing, 웹은 PNG 다운로드)
 - ✅ 백두대간 별도 컬렉션 뷰 + 30선 풀 시드
 - ✅ PDF 도감 export (`expo-print`, A4, 표지+목차+봉우리 페이지)
+- ✅ 친구 비교 (닉네임 검색 + 공개 컬렉션 요약 뷰)
 - ⏳ 봉우리 누끼 처리 (배경 분리) — 외부 API(remove.bg) 또는 클라이언트 WASM 평가 중
-- ⏳ 친구 비교, 유료 전환
+- ⏳ 유료 전환 (RevenueCat·Stripe)
 
 ---
 

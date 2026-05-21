@@ -1,0 +1,51 @@
+import { useQuery } from '@tanstack/react-query';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+
+export type ProfileRow = {
+  id: string;
+  nickname: string;
+};
+
+export type CollectionSummary = {
+  user_id: string;
+  nickname: string;
+  collected_peak_ids: string[];
+  collected_count: number;
+};
+
+export function useSearchProfiles(query: string) {
+  const q = query.trim();
+  return useQuery<ProfileRow[]>({
+    queryKey: ['profiles', 'search', q.toLowerCase()],
+    enabled: isSupabaseConfigured && q.length >= 1,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, nickname')
+        .ilike('nickname', `%${q}%`)
+        .order('nickname', { ascending: true })
+        .limit(10);
+      if (error) return [];
+      return (data ?? []) as ProfileRow[];
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useCollectionSummary(nickname: string | undefined | null) {
+  return useQuery<CollectionSummary | null>({
+    queryKey: ['collection_summary', nickname],
+    enabled: Boolean(isSupabaseConfigured && nickname),
+    queryFn: async () => {
+      if (!nickname) return null;
+      const { data, error } = await supabase
+        .from('collection_summary')
+        .select('user_id, nickname, collected_peak_ids, collected_count')
+        .eq('nickname', nickname)
+        .maybeSingle();
+      if (error || !data) return null;
+      return data as CollectionSummary;
+    },
+    staleTime: 30_000,
+  });
+}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
@@ -11,6 +11,7 @@ import { useAuthStore } from '@/stores/auth';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useMyAscents } from '@/lib/queries/useAscents';
 import { usePeaks } from '@/lib/queries/usePeaks';
+import { useSearchProfiles } from '@/lib/queries/useProfiles';
 import { exportCollectionToPdf } from '@/lib/pdfExport';
 import { PEAKS_SEED, TOTAL_TARGET } from '@/constants/peaks-seed';
 import { COLORS } from '@/constants/theme';
@@ -20,6 +21,10 @@ export default function ProfileScreen() {
   const ascents = useMyAscents();
   const peaksQuery = usePeaks();
   const [exporting, setExporting] = useState(false);
+  const [friendQuery, setFriendQuery] = useState('');
+  const friendSearch = useSearchProfiles(friendQuery);
+  const myNickname =
+    (session?.user.user_metadata?.nickname as string | undefined) ?? null;
 
   const nickname =
     (session?.user.user_metadata?.nickname as string | undefined) ?? '익명의 등산인';
@@ -103,6 +108,101 @@ export default function ProfileScreen() {
           <Row label="JOINED" value={joinedAt} />
           <Row label="COLLECTED" value={`${collected} · ${TOTAL_TARGET}`} mono />
         </View>
+
+        <Divider style={{ marginVertical: 32 }} />
+
+        <MonoLabel tone="gold">FRIENDS · 다른 등산인의 도감</MonoLabel>
+        <Text
+          variant="serifKr"
+          weight="bold"
+          style={{ fontSize: 18, color: COLORS.navy, marginTop: 10 }}
+        >
+          닉네임으로 친구 찾기
+        </Text>
+        <View
+          style={{
+            marginTop: 14,
+            borderBottomWidth: 1,
+            borderBottomColor: COLORS.line,
+          }}
+        >
+          <TextInput
+            value={friendQuery}
+            onChangeText={setFriendQuery}
+            placeholder="친구의 닉네임"
+            placeholderTextColor={COLORS.stoneLight}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={{
+              fontFamily: 'Pretendard-Regular',
+              fontSize: 16,
+              color: COLORS.ink,
+              paddingVertical: 10,
+            }}
+          />
+        </View>
+        {friendQuery.trim().length >= 1 ? (
+          <View style={{ marginTop: 6 }}>
+            {friendSearch.isLoading ? (
+              <View style={{ paddingVertical: 14 }}>
+                <Text variant="sans" style={{ fontSize: 12, color: COLORS.stone }}>
+                  찾는 중…
+                </Text>
+              </View>
+            ) : (friendSearch.data?.length ?? 0) === 0 ? (
+              <View style={{ paddingVertical: 14 }}>
+                <Text variant="sans" style={{ fontSize: 12, color: COLORS.stoneLight }}>
+                  일치하는 등산인이 없습니다.
+                </Text>
+              </View>
+            ) : (
+              friendSearch.data?.map((p) => (
+                <Pressable
+                  key={p.id}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/friend/[nickname]',
+                      params: { nickname: encodeURIComponent(p.nickname) },
+                    })
+                  }
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'baseline',
+                    justifyContent: 'space-between',
+                    paddingVertical: 14,
+                    borderBottomWidth: 1,
+                    borderBottomColor: COLORS.line,
+                    backgroundColor: pressed ? COLORS.creamDark : 'transparent',
+                  })}
+                >
+                  <Text
+                    variant="serifKr"
+                    weight="medium"
+                    style={{
+                      fontSize: 16,
+                      color:
+                        p.nickname === myNickname ? COLORS.stoneLight : COLORS.navy,
+                    }}
+                  >
+                    {p.nickname}
+                    {p.nickname === myNickname ? ' · 나' : ''}
+                  </Text>
+                  <Text
+                    variant="mono"
+                    weight="medium"
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: 1.4,
+                      color: COLORS.gold,
+                    }}
+                  >
+                    보기 →
+                  </Text>
+                </Pressable>
+              ))
+            )}
+          </View>
+        ) : null}
 
         <Divider style={{ marginVertical: 32 }} />
 

@@ -58,7 +58,7 @@ export function useCreateAscent() {
           gps_lat: input.gpsLat,
           gps_lng: input.gpsLng,
           notes: input.notes,
-          is_public: false,
+          is_public: true,
         })
         .select('id, peak_id, ascended_at')
         .single();
