@@ -1,5 +1,13 @@
+import { useRef, useState } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
-import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import {
+  View,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/Text';
@@ -7,7 +15,10 @@ import { Button } from '@/components/ui/Button';
 import { MonoLabel } from '@/components/ui/MonoLabel';
 import { Divider } from '@/components/ui/Divider';
 import { MountainSvg } from '@/components/MountainSvg';
+import { AscentCard } from '@/components/AscentCard';
 import { usePeakById } from '@/lib/queries/usePeaks';
+import { useMyAscentForPeak } from '@/lib/queries/useAscents';
+import { captureAndShareCard } from '@/lib/share';
 import { PEAKS_SEED } from '@/constants/peaks-seed';
 import { COLORS } from '@/constants/theme';
 
@@ -15,8 +26,26 @@ export default function PeakDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const peakQuery = usePeakById(id);
   const peak = peakQuery.data;
+  const ascentQuery = useMyAscentForPeak(peak?.id);
+  const ascent = ascentQuery.data;
   const seedIndex = PEAKS_SEED.findIndex((p) => `seed-${p.slug}` === id || p.slug === id);
   const number = seedIndex >= 0 ? String(seedIndex + 1).padStart(3, '0') : '—';
+  const cardRef = useRef<View>(null);
+  const [sharing, setSharing] = useState(false);
+  const { width: winWidth } = useWindowDimensions();
+  const cardWidth = Math.min(winWidth - 48, 520);
+
+  const handleShare = async () => {
+    if (!peak || !ascent) return;
+    try {
+      setSharing(true);
+      await captureAndShareCard({ ref: cardRef, peakName: peak.name_ko });
+    } catch (err) {
+      Alert.alert('공유 실패', err instanceof Error ? err.message : '다시 시도해 주세요.');
+    } finally {
+      setSharing(false);
+    }
+  };
 
   if (peakQuery.isLoading) {
     return (
@@ -155,26 +184,88 @@ export default function PeakDetailScreen() {
 
           <Divider />
 
-          <View style={{ marginTop: 32 }}>
-            <Button
-              label="이 봉우리 정복하기"
-              size="lg"
-              onPress={() =>
-                router.push({ pathname: '/(tabs)/add', params: { peakSlug: peak.slug } })
-              }
-            />
-            <Text
-              variant="sans"
-              style={{
-                textAlign: 'center',
-                marginTop: 14,
-                color: COLORS.stone,
-                fontSize: 12,
-              }}
-            >
-              사진을 골라 한 페이지로 만들면 도감에 추가됩니다.
-            </Text>
-          </View>
+          {ascent ? (
+            <View style={{ marginTop: 28 }}>
+              <View style={{ alignItems: 'center', marginBottom: 18 }}>
+                <MonoLabel tone="gold">CARD · 인증 카드</MonoLabel>
+                <Text
+                  variant="serifEn"
+                  weight="italic"
+                  style={{
+                    marginTop: 6,
+                    color: COLORS.stone,
+                    fontStyle: 'italic',
+                    fontSize: 12,
+                  }}
+                >
+                  A page from your trove.
+                </Text>
+              </View>
+
+              <View style={{ alignSelf: 'center' }}>
+                <AscentCard
+                  ref={cardRef}
+                  peak={peak}
+                  photoUrl={ascent.photo_url}
+                  ascendedAt={new Date(ascent.ascended_at)}
+                  notes={ascent.notes}
+                  serialNumber={number}
+                  width={cardWidth}
+                />
+              </View>
+
+              <View style={{ marginTop: 24 }}>
+                <Button
+                  label={sharing ? '카드 생성 중…' : '인스타그램으로 공유'}
+                  size="lg"
+                  disabled={sharing}
+                  onPress={handleShare}
+                />
+                <View style={{ marginTop: 10 }}>
+                  <Button
+                    label="기록 다시 만들기"
+                    variant="ghost"
+                    onPress={() =>
+                      router.push({ pathname: '/(tabs)/add', params: { peakSlug: peak.slug } })
+                    }
+                  />
+                </View>
+              </View>
+              <Text
+                variant="sans"
+                style={{
+                  textAlign: 'center',
+                  marginTop: 12,
+                  color: COLORS.stone,
+                  fontSize: 11,
+                  lineHeight: 16,
+                }}
+              >
+                카드는 1:1 정사각형으로 저장됩니다. 인스타그램·메시지 어디에든 어울립니다.
+              </Text>
+            </View>
+          ) : (
+            <View style={{ marginTop: 32 }}>
+              <Button
+                label="이 봉우리 정복하기"
+                size="lg"
+                onPress={() =>
+                  router.push({ pathname: '/(tabs)/add', params: { peakSlug: peak.slug } })
+                }
+              />
+              <Text
+                variant="sans"
+                style={{
+                  textAlign: 'center',
+                  marginTop: 14,
+                  color: COLORS.stone,
+                  fontSize: 12,
+                }}
+              >
+                사진을 골라 한 페이지로 만들면 도감에 추가됩니다.
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
