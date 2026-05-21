@@ -73,6 +73,24 @@ async function handle(req: Request): Promise<Response> {
   }
   const userId = userData.user.id;
 
+  // Plus 게이팅: 본인의 profiles.is_pro = true 여야 한다.
+  const { data: profileRow } = await supabase
+    .from('profiles')
+    .select('is_pro, pro_expires_at')
+    .eq('id', userId)
+    .maybeSingle();
+  const proExp = profileRow?.pro_expires_at
+    ? new Date(profileRow.pro_expires_at as string).getTime()
+    : null;
+  const isPro =
+    profileRow?.is_pro === true && (proExp === null || proExp > Date.now());
+  if (!isPro) {
+    return json(
+      { error: '스튜디오 모드는 TROVE PLUS 정회원 기능입니다.' },
+      { status: 402 }
+    );
+  }
+
   // 1) 원본 사진을 다운로드.
   const photoRes = await fetch(body.photo_url);
   if (!photoRes.ok) {

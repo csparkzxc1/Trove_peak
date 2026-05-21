@@ -11,7 +11,7 @@ import { useAuthStore } from '@/stores/auth';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useMyAscents } from '@/lib/queries/useAscents';
 import { usePeaks } from '@/lib/queries/usePeaks';
-import { useSearchProfiles, useMyProfile } from '@/lib/queries/useProfiles';
+import { useSearchProfiles, useMyProfile, useEntitlements } from '@/lib/queries/useProfiles';
 import { exportCollectionToPdf } from '@/lib/pdfExport';
 import { PEAKS_SEED, TOTAL_TARGET } from '@/constants/peaks-seed';
 import { COLORS } from '@/constants/theme';
@@ -21,6 +21,7 @@ export default function ProfileScreen() {
   const ascents = useMyAscents();
   const peaksQuery = usePeaks();
   const myProfile = useMyProfile();
+  const { isPro } = useEntitlements();
   const [exporting, setExporting] = useState(false);
   const [friendQuery, setFriendQuery] = useState('');
   const friendSearch = useSearchProfiles(friendQuery);
@@ -96,13 +97,40 @@ export default function ProfileScreen() {
         }}
       >
         <MonoLabel tone="gold">CURATOR · 도감의 주인</MonoLabel>
-        <Text
-          variant="serifKr"
-          weight="bold"
-          style={{ fontSize: 28, color: COLORS.navy, marginTop: 14 }}
+        <View
+          style={{
+            marginTop: 14,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+          }}
         >
-          {nickname}
-        </Text>
+          <Text
+            variant="serifKr"
+            weight="bold"
+            style={{ fontSize: 28, color: COLORS.navy }}
+          >
+            {nickname}
+          </Text>
+          {isPro ? (
+            <View
+              style={{
+                borderWidth: 1,
+                borderColor: COLORS.gold,
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+              }}
+            >
+              <Text
+                variant="mono"
+                weight="medium"
+                style={{ fontSize: 10, letterSpacing: 1.6, color: COLORS.gold }}
+              >
+                PLUS
+              </Text>
+            </View>
+          ) : null}
+        </View>
 
         <Divider style={{ marginVertical: 28 }} />
 
@@ -227,7 +255,14 @@ export default function ProfileScreen() {
           >
             정복한 봉우리만으로 표지·목차·페이지를 만든 A4 PDF가 생성됩니다.
           </Text>
-          <Button label="로그아웃" variant="outline" onPress={handleSignOut} />
+          {!isPro ? (
+            <Button
+              label="TROVE PLUS · 정회원 보기"
+              variant="outline"
+              onPress={() => router.push('/paywall')}
+            />
+          ) : null}
+          <Button label="로그아웃" variant="ghost" onPress={handleSignOut} />
         </View>
 
         <Text

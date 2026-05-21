@@ -19,8 +19,12 @@
 // deno-lint-ignore-file no-explicit-any
 declare const Deno: { env: { get(name: string): string | undefined } };
 
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const MODEL = Deno.env.get('CLAUDE_VISION_MODEL') ?? 'claude-sonnet-4-6';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -98,6 +102,41 @@ async function handle(req: Request): Promise<Response> {
     return new Response(
       JSON.stringify({ error: 'ANTHROPIC_API_KEY 환경 변수가 설정되지 않았습니다.' }),
       { status: 500, headers: { ...CORS, 'content-type': 'application/json' } }
+    );
+  }
+
+  // Plus 게이팅: 본인의 profiles.is_pro = true 여야 한다.
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return new Response(JSON.stringify({ error: '인증 헤더가 필요합니다.' }), {
+      status: 401,
+      headers: { ...CORS, 'content-type': 'application/json' },
+    });
+  }
+  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: userData } = await client.auth.getUser();
+  if (!userData.user) {
+    return new Response(JSON.stringify({ error: '사용자를 확인하지 못했습니다.' }), {
+      status: 401,
+      headers: { ...CORS, 'content-type': 'application/json' },
+    });
+  }
+  const { data: profileRow } = await client
+    .from('profiles')
+    .select('is_pro, pro_expires_at')
+    .eq('id', userData.user.id)
+    .maybeSingle();
+  const proExp = profileRow?.pro_expires_at
+    ? new Date(profileRow.pro_expires_at as string).getTime()
+    : null;
+  const isPro =
+    profileRow?.is_pro === true && (proExp === null || proExp > Date.now());
+  if (!isPro) {
+    return new Response(
+      JSON.stringify({ error: 'AI 식별은 TROVE PLUS 정회원 기능입니다.' }),
+      { status: 402, headers: { ...CORS, 'content-type': 'application/json' } }
     );
   }
 

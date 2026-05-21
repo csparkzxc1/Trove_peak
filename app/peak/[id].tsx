@@ -20,6 +20,7 @@ import { AscentCard } from '@/components/AscentCard';
 import { usePeakById } from '@/lib/queries/usePeaks';
 import { useMyAscentForPeak } from '@/lib/queries/useAscents';
 import { useRemoveBackground } from '@/lib/queries/removeBg';
+import { useEntitlements } from '@/lib/queries/useProfiles';
 import { useUpdateAscent, useDeleteAscent } from '@/lib/queries/updateAscent';
 import { captureAndShareCard } from '@/lib/share';
 import { PEAKS_SEED } from '@/constants/peaks-seed';
@@ -38,6 +39,7 @@ export default function PeakDetailScreen() {
   const [useStudio, setUseStudio] = useState(false);
   const [aspect, setAspect] = useState<'1:1' | '9:16'>('1:1');
   const removeBg = useRemoveBackground();
+  const { isPro } = useEntitlements();
   const updateAscent = useUpdateAscent();
   const deleteAscent = useDeleteAscent();
   const [editOpen, setEditOpen] = useState(false);
@@ -117,6 +119,10 @@ export default function PeakDetailScreen() {
   const handleRemoveBg = () => {
     if (!ascent?.id || !ascent.photo_url) {
       Alert.alert('처리할 사진이 없습니다');
+      return;
+    }
+    if (!isPro) {
+      router.push('/paywall');
       return;
     }
     removeBg.mutate(
@@ -354,7 +360,13 @@ export default function PeakDetailScreen() {
               ) : (
                 <View style={{ marginTop: 18 }}>
                   <Button
-                    label={removeBg.isPending ? '봉우리 도려내는 중…' : '스튜디오 모드 만들기'}
+                    label={
+                      removeBg.isPending
+                        ? '봉우리 도려내는 중…'
+                        : isPro
+                          ? '스튜디오 모드 만들기'
+                          : '스튜디오 모드 · PLUS'
+                    }
                     variant="outline"
                     size="sm"
                     disabled={removeBg.isPending}

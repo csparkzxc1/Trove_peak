@@ -83,7 +83,12 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: COLORS.cream },
             animation: 'fade',
           }}
-        />
+        >
+          <Stack.Screen
+            name="paywall"
+            options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+          />
+        </Stack>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

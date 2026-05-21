@@ -5,6 +5,8 @@ import { useAuthStore } from '@/stores/auth';
 export type ProfileRow = {
   id: string;
   nickname: string;
+  is_pro: boolean;
+  pro_expires_at: string | null;
 };
 
 export type CollectionSummary = {
@@ -23,7 +25,7 @@ export function useMyProfile() {
       if (!userId) return null;
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, nickname')
+        .select('id, nickname, is_pro, pro_expires_at')
         .eq('id', userId)
         .maybeSingle();
       if (error || !data) return null;
@@ -31,6 +33,21 @@ export function useMyProfile() {
     },
     staleTime: 60_000,
   });
+}
+
+export function useEntitlements() {
+  const profile = useMyProfile();
+  const now = Date.now();
+  const expiresAt = profile.data?.pro_expires_at
+    ? new Date(profile.data.pro_expires_at).getTime()
+    : null;
+  const isPro =
+    profile.data?.is_pro === true && (expiresAt === null || expiresAt > now);
+  return {
+    isPro,
+    expiresAt,
+    isLoading: profile.isLoading,
+  };
 }
 
 export function useSearchProfiles(query: string) {

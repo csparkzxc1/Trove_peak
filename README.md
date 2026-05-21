@@ -33,10 +33,13 @@
 - ✅ **데이터 정합성 검증** — `npm run validate:peaks` (slug 중복·좌표·표고·지역·카운트 검사)
 - ✅ **한국 지도 뷰** — 도감 메인의 GRID/MAP 토글, 정복(gold) vs 미정복(stone) 분기, 탭 → 봉우리 상세
 - ✅ **기록 편집·삭제** — 봉우리 상세에서 메모·공개 토글 편집, 삭제 시 확인 알림
+- ✅ **TROVE PLUS 게이팅** — `profiles.is_pro` 기반 엔타이틀먼트, Paywall 모달, 클라이언트·Edge Function 양쪽에서 검증
 - ✅ TanStack Query, Zustand, react-native-svg, react-hook-form, zod
 - ✅ TypeScript 에러 0, 웹 번들 검증 통과
 
-앱은 **무료 베이스**로 운영한다(과금/구독 없음). Phase II는 사실상 마감 상태이며 다음은 운영 다듬기 — 사진 ascended_at 편집, 한국 지도 outline 보강, 봉우리 좌표 국토지리정보원 교차 검증, 도감 비어 있을 때의 온보딩.
+**운영 비용은 0원**을 목표로 한다. 외부 API 비용이 드는 기능(Claude Vision AI 식별, remove.bg 누끼)은 **TROVE PLUS** 정회원 기능으로 분리해 매출로 상쇄한다. 무료 사용자도 100% 도감/등록/카드/공유/PDF/친구비교를 쓸 수 있다.
+
+Phase II는 사실상 마감 상태이며 다음은 결제 통합(RevenueCat) + 운영 다듬기 — 좌표 국토지리정보원 교차 검증, 사진 cleanup, 도감 비어 있을 때의 온보딩.
 
 ---
 
@@ -296,7 +299,69 @@ supabase functions deploy remove-bg
 
 이 기능은 *선택*이다. 키가 없거나 함수가 배포되지 않으면 봉우리 상세 화면의 “스튜디오 모드 만들기” 버튼이 친절한 에러를 띄울 뿐, 다른 흐름엔 영향이 없다.
 
-> 비용: remove.bg는 사진 1장당 약 $0.20(또는 매월 50장 무료 플랜). 무료 운영을 유지하려면 사용자에게 “스튜디오 모드” 버튼 노출 자체를 가리거나, 추후 클라이언트 WASM(@imgly/background-removal) 변형을 검토.
+> 비용: remove.bg는 사진 1장당 약 $0.20(또는 매월 50장 무료 플랜). 이 비용은 §2-9의 Plus 게이팅으로 매출에서 상쇄한다.
+
+### 2-9. TROVE PLUS · 엔타이틀먼트 + 결제
+
+비용이 드는 외부 API 기능(AI 식별, 누끼)은 Plus 정회원에게만 노출한다. 운영 비용은 0원 목표, 매출은 IAP에서 발생.
+
+**스키마 마이그레이션:**
+
+```sql
+-- profiles 테이블에 is_pro / pro_expires_at 추가
+alter table profiles
+  add column if not exists is_pro boolean not null default false,
+  add column if not exists pro_expires_at timestamptz;
+
+-- 사용자가 직접 is_pro를 못 바꾸도록 트리거로 차단 (결제 웹훅 외 변경 금지)
+create or replace function prevent_pro_self_update()
+returns trigger
+language plpgsql
+as $$
+begin
+  if (new.is_pro is distinct from old.is_pro
+      or new.pro_expires_at is distinct from old.pro_expires_at)
+     and auth.uid() = old.id then
+    raise exception 'is_pro/pro_expires_at는 결제 웹훅으로만 변경할 수 있습니다.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_prevent_pro_self_update on profiles;
+create trigger profiles_prevent_pro_self_update
+  before update on profiles
+  for each row execute function prevent_pro_self_update();
+```
+
+> Plus 사용자를 수동으로 만들고 싶다면(개발 중·운영팀 어드민) SQL Editor에서:
+> ```sql
+> update profiles set is_pro = true, pro_expires_at = null where nickname = '...';
+> ```
+> (auth.uid()가 NULL이라 트리거가 무시한다.)
+
+**클라이언트 게이팅:**
+
+- `lib/queries/useProfiles.ts` → `useEntitlements()` 가 `{ isPro }`를 돌려줌
+- AI 식별 버튼·누끼 버튼은 `isPro === false`면 `/paywall` 모달로 라우팅
+- 라벨에 `· PLUS` 표기가 붙음
+
+**서버 측 게이팅:**
+
+- `identify-peak` / `remove-bg` Edge Function 모두 사용자 JWT로 `profiles.is_pro`를 조회해 false면 **402 Payment Required**로 거절
+- 클라이언트 우회 시도 차단
+
+**RevenueCat 통합 (다음 단계):**
+
+1. RevenueCat 프로젝트 + iOS/Android 앱 등록 (https://app.revenuecat.com)
+2. App Store Connect / Play Console에 구독·일회성 IAP 상품 등록
+   (제안: `trove_plus_monthly`, `trove_plus_yearly`, `trove_plus_lifetime`)
+3. `react-native-purchases` SDK 설치 + `RootLayout`에서 `Purchases.configure({ apiKey })`
+4. `app/paywall.tsx`의 `handlePurchase`를 `Purchases.purchasePackage(...)`로 교체
+5. RevenueCat Webhook → Supabase Edge Function `revenuecat-webhook` (service_role)
+   에서 `profiles.is_pro` 와 `pro_expires_at` 갱신
+
+웹훅 함수는 본 저장소엔 미포함(상품 ID·시크릿이 환경별로 다르므로 출시 직전에 추가).
 
 ---
 
@@ -314,6 +379,7 @@ trove-peaks/
 │   │   └── profile.tsx           # 프로필
 │   ├── peak/[id].tsx             # 봉우리 상세
 │   ├── friend/[nickname].tsx     # 친구 도감·비교
+│   ├── paywall.tsx               # TROVE PLUS 결제 모달
 │   ├── _layout.tsx               # 루트 (폰트, Provider, splash)
 │   └── index.tsx                 # auth 분기
 ├── components/
@@ -410,7 +476,7 @@ npm run validate:peaks  # 시드 정합성 검사 (slug·좌표·표고·카운�
 - ✅ 데이터 정합성 검증 (`npm run validate:peaks` 스크립트)
 - ✅ 한국 지도 뷰 (도감 메인 MAP 모드)
 - ✅ 정복 기록 편집/삭제
-- ❌ 유료 전환 — 무료 베이스로 운영
+- 🔜 결제 통합 (RevenueCat) — Paywall UI/엔타이틀먼트 게이팅 완료, IAP 상품 연결 대기
 - ⏳ 좌표 국토지리정보원 교차 검증, 사진/촬영일 편집, 온보딩
 
 ---

@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
@@ -21,6 +21,7 @@ import { PeakPicker } from '@/components/PeakPicker';
 import { useAuthStore } from '@/stores/auth';
 import { useCreateAscent } from '@/lib/queries/createAscent';
 import { useIdentifyPeak } from '@/lib/queries/identifyPeak';
+import { useEntitlements } from '@/lib/queries/useProfiles';
 import { findNearestPeak } from '@/lib/queries/findNearestPeak';
 import { pickFromCamera, pickFromGallery, type PickedPhoto } from '@/lib/imagePicker';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -41,6 +42,7 @@ export default function AddScreen() {
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const createAscent = useCreateAscent();
   const identifyPeak = useIdentifyPeak(peaksQuery.data);
+  const { isPro } = useEntitlements();
   const [recordedAt] = useState(new Date());
 
   useEffect(() => {
@@ -104,6 +106,10 @@ export default function AddScreen() {
 
   const handleIdentifyWithAI = () => {
     if (!photo) return;
+    if (!isPro) {
+      router.push('/paywall');
+      return;
+    }
     const candidates = (() => {
       if (!peaksQuery.data) return [];
       const lat = photo.exifLat;
@@ -322,7 +328,13 @@ export default function AddScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Button
-                    label={identifyPeak.isPending ? 'AI 식별 중…' : 'AI로 식별'}
+                    label={
+                      identifyPeak.isPending
+                        ? 'AI 식별 중…'
+                        : isPro
+                          ? 'AI로 식별'
+                          : 'AI로 식별 · PLUS'
+                    }
                     variant="outline"
                     size="sm"
                     disabled={identifyPeak.isPending}
