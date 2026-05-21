@@ -1,88 +1,444 @@
-import { View, ScrollView } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 
 import { Text } from '@/components/ui/Text';
+import { Button } from '@/components/ui/Button';
 import { MonoLabel } from '@/components/ui/MonoLabel';
 import { Divider } from '@/components/ui/Divider';
-import { MountainSvg } from '@/components/MountainSvg';
+import { PeakPicker } from '@/components/PeakPicker';
+
+import { useAuthStore } from '@/stores/auth';
+import { useCreateAscent } from '@/lib/queries/createAscent';
+import { pickFromCamera, pickFromGallery, type PickedPhoto } from '@/lib/imagePicker';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import { usePeaks } from '@/lib/queries/usePeaks';
 import { COLORS } from '@/constants/theme';
+import type { Peak } from '@/lib/types';
 
 export default function AddScreen() {
+  const session = useAuthStore((s) => s.session);
+  const params = useLocalSearchParams<{ peakSlug?: string }>();
+  const peaksQuery = usePeaks();
+  const [photo, setPhoto] = useState<PickedPhoto | null>(null);
+  const [peak, setPeak] = useState<Peak | null>(null);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [notes, setNotes] = useState('');
+  const createAscent = useCreateAscent();
+  const [recordedAt] = useState(new Date());
+
+  useEffect(() => {
+    if (!params.peakSlug || peak) return;
+    const match = peaksQuery.data?.find((p) => p.slug === params.peakSlug);
+    if (match) setPeak(match);
+  }, [params.peakSlug, peaksQuery.data, peak]);
+
+  const handlePickFromCamera = async () => {
+    try {
+      const next = await pickFromCamera();
+      if (next) setPhoto(next);
+    } catch (err) {
+      Alert.alert('카메라 접근 불가', err instanceof Error ? err.message : '다시 시도해 주세요.');
+    }
+  };
+
+  const handlePickFromGallery = async () => {
+    try {
+      const next = await pickFromGallery();
+      if (next) setPhoto(next);
+    } catch (err) {
+      Alert.alert('갤러리 접근 불가', err instanceof Error ? err.message : '다시 시도해 주세요.');
+    }
+  };
+
+  const handleSubmit = () => {
+    if (!isSupabaseConfigured) {
+      Alert.alert(
+        '설정이 필요합니다',
+        '도감 기록은 Supabase 설정 이후에 활성화됩니다. .env.local에 키를 추가해 주세요.'
+      );
+      return;
+    }
+    if (!session?.user.id) {
+      Alert.alert('로그인이 필요합니다', '도감에 기록하려면 먼저 로그인해 주세요.');
+      return;
+    }
+    if (!photo) {
+      Alert.alert('사진을 선택해 주세요', '정상에서의 사진 한 장이 필요합니다.');
+      return;
+    }
+    if (!peak) {
+      Alert.alert('봉우리를 선택해 주세요', '어느 봉우리에서의 기록인지 선택해 주세요.');
+      return;
+    }
+
+    createAscent.mutate(
+      {
+        userId: session.user.id,
+        peak,
+        photoUri: photo.uri,
+        photoMimeType: photo.mimeType,
+        ascendedAt: photo.exifTakenAt ? new Date(photo.exifTakenAt) : recordedAt,
+        gpsLat: photo.exifLat,
+        gpsLng: photo.exifLng,
+        notes: notes.trim() ? notes.trim() : null,
+      },
+      {
+        onSuccess: () => {
+          Alert.alert(
+            '도감에 추가되었습니다',
+            `${peak.name_ko}이(가) 당신의 도감에 추가되었습니다.`,
+            [
+              {
+                text: '확인',
+                onPress: () => {
+                  setPhoto(null);
+                  setPeak(null);
+                  setNotes('');
+                },
+              },
+            ]
+          );
+        },
+        onError: (err) => {
+          Alert.alert(
+            '기록을 저장하지 못했습니다',
+            err instanceof Error ? err.message : '다시 시도해 주세요.'
+          );
+        },
+      }
+    );
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.cream }} edges={['top']}>
-      <ScrollView
-        contentContainerStyle={{
-          paddingHorizontal: 28,
-          paddingTop: 32,
-          paddingBottom: 48,
-        }}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <MonoLabel tone="gold">NEW ENTRY · 정복 등록</MonoLabel>
-        <Text
-          variant="serifKr"
-          weight="bold"
-          style={{ fontSize: 26, color: COLORS.navy, marginTop: 12, lineHeight: 36 }}
-        >
-          다음 봉우리에서{`\n`}준비되는 기능입니다.
-        </Text>
-
-        <Divider style={{ marginVertical: 32 }} />
-
-        <View style={{ alignItems: 'center', marginVertical: 24 }}>
-          <MountainSvg size={160} stroke={COLORS.stoneLight} variant="twin" />
-        </View>
-
-        <Text
-          variant="sans"
-          style={{
-            color: COLORS.stone,
-            fontSize: 14,
-            lineHeight: 22,
-            textAlign: 'center',
-            marginTop: 12,
+        <ScrollView
+          contentContainerStyle={{
+            paddingHorizontal: 24,
+            paddingTop: 24,
+            paddingBottom: 64,
           }}
+          keyboardShouldPersistTaps="handled"
         >
-          정상의 사진과 함께 GPS, 시간, 날씨가 자동으로 기록되어{`\n`}봉우리 한 장이
-          도감에 더해집니다.
-        </Text>
+          <MonoLabel tone="gold">NEW ENTRY · 정복 등록</MonoLabel>
+          <Text
+            variant="serifKr"
+            weight="bold"
+            style={{
+              fontSize: 26,
+              color: COLORS.navy,
+              marginTop: 12,
+              lineHeight: 36,
+            }}
+          >
+            한 장의 사진을{`\n`}도감의 페이지로.
+          </Text>
 
-        <View style={{ marginTop: 40 }}>
-          <Divider />
-          <View style={{ paddingVertical: 18 }}>
-            <MonoLabel tone="stone">COMING IN PHASE II</MonoLabel>
-            <View style={{ marginTop: 14 }}>
-              {[
-                '사진 촬영 · 갤러리 선택',
-                'GPS 자동 식별 및 봉우리 매칭',
-                'AI 누끼 · 인증 카드 자동 생성',
-                '인스타그램 · 친구 공유',
-              ].map((line) => (
-                <View
-                  key={line}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    marginBottom: 10,
-                  }}
-                >
-                  <View
+          <Divider style={{ marginVertical: 28 }} />
+
+          <SectionLabel index="01" label="PHOTO · 정상의 사진" />
+          <PhotoSlot
+            photo={photo}
+            onCamera={handlePickFromCamera}
+            onGallery={handlePickFromGallery}
+            onClear={() => setPhoto(null)}
+          />
+
+          <SectionLabel index="02" label="PEAK · 봉우리" style={{ marginTop: 32 }} />
+          <Pressable
+            onPress={() => setPickerVisible(true)}
+            style={({ pressed }) => ({
+              borderWidth: 1,
+              borderColor: peak ? COLORS.navy : COLORS.line,
+              borderStyle: peak ? 'solid' : 'dashed',
+              backgroundColor: pressed ? COLORS.creamDark : COLORS.cream,
+              padding: 16,
+            })}
+          >
+            {peak ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'baseline',
+                }}
+              >
+                <View>
+                  <Text
+                    variant="serifKr"
+                    weight="bold"
+                    style={{ fontSize: 20, color: COLORS.navy }}
+                  >
+                    {peak.name_ko}
+                  </Text>
+                  <Text
+                    variant="serifEn"
+                    weight="italic"
                     style={{
-                      width: 4,
-                      height: 4,
-                      backgroundColor: COLORS.gold,
-                      marginRight: 12,
+                      fontSize: 12,
+                      color: COLORS.stone,
+                      fontStyle: 'italic',
+                      marginTop: 2,
                     }}
-                  />
-                  <Text variant="sans" style={{ color: COLORS.ink, fontSize: 14 }}>
-                    {line}
+                  >
+                    {peak.name_en ?? ''} · {peak.region_short ?? peak.region}
                   </Text>
                 </View>
-              ))}
-            </View>
+                <Text
+                  variant="mono"
+                  weight="medium"
+                  style={{ fontSize: 14, color: COLORS.navy }}
+                >
+                  {peak.elevation_m.toLocaleString()}m
+                </Text>
+              </View>
+            ) : (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <Text
+                  variant="sans"
+                  style={{ color: COLORS.stone, fontSize: 14 }}
+                >
+                  봉우리를 선택하세요
+                </Text>
+                <MonoLabel tone="gold">SELECT</MonoLabel>
+              </View>
+            )}
+          </Pressable>
+
+          <SectionLabel index="03" label="RECORDED · 기록 시각" style={{ marginTop: 32 }} />
+          <View
+            style={{
+              borderWidth: 1,
+              borderColor: COLORS.line,
+              padding: 16,
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+            }}
+          >
+            <Text
+              variant="serifKr"
+              weight="medium"
+              style={{ fontSize: 16, color: COLORS.navy }}
+            >
+              {formatRecorded(photo?.exifTakenAt ? new Date(photo.exifTakenAt) : recordedAt)}
+            </Text>
+            <MonoLabel tone="stone">
+              {photo?.exifTakenAt ? 'EXIF' : '오늘'}
+            </MonoLabel>
           </View>
-          <Divider />
-        </View>
-      </ScrollView>
+          {photo?.exifLat !== null && photo?.exifLat !== undefined && photo.exifLng !== null ? (
+            <Text
+              variant="mono"
+              style={{
+                fontSize: 11,
+                color: COLORS.stone,
+                marginTop: 8,
+                letterSpacing: 0.4,
+              }}
+            >
+              GPS · {photo.exifLat?.toFixed(4)}, {photo.exifLng?.toFixed(4)}
+            </Text>
+          ) : null}
+
+          <SectionLabel index="04" label="NOTES · 메모" style={{ marginTop: 32 }} />
+          <View
+            style={{
+              borderWidth: 1,
+              borderColor: COLORS.line,
+              padding: 14,
+              minHeight: 96,
+            }}
+          >
+            <TextInput
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="이 봉우리에서의 한 줄 메모 (선택)"
+              placeholderTextColor={COLORS.stoneLight}
+              multiline
+              textAlignVertical="top"
+              style={{
+                fontFamily: 'Pretendard-Regular',
+                fontSize: 14,
+                color: COLORS.ink,
+                minHeight: 72,
+              }}
+            />
+          </View>
+
+          <View style={{ marginTop: 40 }}>
+            <Button
+              label={createAscent.isPending ? '기록하는 중…' : '도감에 기록'}
+              size="lg"
+              disabled={createAscent.isPending}
+              onPress={handleSubmit}
+            />
+            <Text
+              variant="sans"
+              style={{
+                textAlign: 'center',
+                marginTop: 14,
+                color: COLORS.stone,
+                fontSize: 12,
+                lineHeight: 18,
+              }}
+            >
+              사진은 도감 보관함에 안전하게 저장됩니다. 공개 여부는 언제든 변경할 수 있습니다.
+            </Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <PeakPicker
+        visible={pickerVisible}
+        selectedId={peak?.id ?? null}
+        onSelect={(next) => {
+          setPeak(next);
+          setPickerVisible(false);
+        }}
+        onClose={() => setPickerVisible(false)}
+      />
     </SafeAreaView>
   );
+}
+
+function SectionLabel({
+  index,
+  label,
+  style,
+}: {
+  index: string;
+  label: string;
+  style?: object;
+}) {
+  return (
+    <View
+      style={[
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          marginBottom: 12,
+        },
+        style,
+      ]}
+    >
+      <Text
+        variant="mono"
+        weight="medium"
+        style={{
+          fontSize: 10,
+          letterSpacing: 1.6,
+          color: COLORS.gold,
+          marginRight: 10,
+        }}
+      >
+        {index}
+      </Text>
+      <View style={{ flex: 1 }}>
+        <MonoLabel tone="stone">{label}</MonoLabel>
+      </View>
+    </View>
+  );
+}
+
+function PhotoSlot({
+  photo,
+  onCamera,
+  onGallery,
+  onClear,
+}: {
+  photo: PickedPhoto | null;
+  onCamera: () => void;
+  onGallery: () => void;
+  onClear: () => void;
+}) {
+  if (photo) {
+    return (
+      <View>
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: COLORS.navy,
+            padding: 6,
+            backgroundColor: COLORS.cream,
+          }}
+        >
+          <Image
+            source={{ uri: photo.uri }}
+            style={{ width: '100%', aspectRatio: photo.width / photo.height }}
+            resizeMode="cover"
+          />
+        </View>
+        <View style={{ flexDirection: 'row', marginTop: 12, gap: 10 }}>
+          <View style={{ flex: 1 }}>
+            <Button label="다시 촬영" variant="outline" onPress={onCamera} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Button label="제거" variant="ghost" onPress={onClear} />
+          </View>
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View
+      style={{
+        borderWidth: 1,
+        borderColor: COLORS.line,
+        borderStyle: 'dashed',
+        padding: 22,
+        alignItems: 'center',
+      }}
+    >
+      <Text
+        variant="serifEn"
+        weight="italic"
+        style={{
+          color: COLORS.stone,
+          fontStyle: 'italic',
+          fontSize: 14,
+          marginBottom: 18,
+        }}
+      >
+        A page for one summit.
+      </Text>
+      <View style={{ flexDirection: 'row', gap: 10, alignSelf: 'stretch' }}>
+        <View style={{ flex: 1 }}>
+          <Button label="카메라" onPress={onCamera} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button label="갤러리" variant="outline" onPress={onGallery} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function formatRecorded(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${y}년 ${m}월 ${day}일 · ${hh}:${mm}`;
 }

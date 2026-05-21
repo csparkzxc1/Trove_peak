@@ -1,13 +1,5 @@
 import { useLocalSearchParams, router } from 'expo-router';
-import {
-  View,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  ToastAndroid,
-  Platform,
-  Alert,
-} from 'react-native';
+import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/Text';
@@ -18,14 +10,6 @@ import { MountainSvg } from '@/components/MountainSvg';
 import { usePeakById } from '@/lib/queries/usePeaks';
 import { PEAKS_SEED } from '@/constants/peaks-seed';
 import { COLORS } from '@/constants/theme';
-
-function showToast(message: string) {
-  if (Platform.OS === 'android') {
-    ToastAndroid.show(message, ToastAndroid.SHORT);
-  } else {
-    Alert.alert('', message);
-  }
-}
 
 export default function PeakDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -175,7 +159,9 @@ export default function PeakDetailScreen() {
             <Button
               label="이 봉우리 정복하기"
               size="lg"
-              onPress={() => showToast('다음 업데이트에 활성화됩니다')}
+              onPress={() =>
+                router.push({ pathname: '/(tabs)/add', params: { peakSlug: peak.slug } })
+              }
             />
             <Text
               variant="sans"
@@ -186,7 +172,7 @@ export default function PeakDetailScreen() {
                 fontSize: 12,
               }}
             >
-              사진과 GPS로 자동 기록되는 정복 등록은 Phase II에 공개됩니다.
+              사진을 골라 한 페이지로 만들면 도감에 추가됩니다.
             </Text>
           </View>
         </View>

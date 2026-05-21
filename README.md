@@ -18,11 +18,12 @@
 - ✅ 폰트 4종 로드 — Noto Serif KR, Cormorant Garamond, Pretendard, JetBrains Mono
 - ✅ Supabase Auth (이메일/패스워드) + 세션 영속화(AsyncStorage)
 - ✅ 도감 메인 — 진행률 블록, 12개 시드 봉우리 그리드(정복/미정복 분기)
-- ✅ 봉우리 상세 — 표고/지역/난이도/좌표, “정복하기” placeholder 토스트
+- ✅ 봉우리 상세 — 표고/지역/난이도/좌표, “정복하기” 진입
+- ✅ **정복 등록 수동 흐름** — 카메라/갤러리 사진 선택(EXIF GPS·시각 추출), 봉우리 검색 모달, 메모, Supabase Storage 업로드 + `ascents` insert
 - ✅ TanStack Query, Zustand, react-native-svg, react-hook-form, zod
 - ✅ TypeScript 에러 0, 웹 번들 검증 통과
 
-다음 단계는 Phase II로 분리한다 — 카메라/GPS/AI 식별/누끼/카드/공유.
+다음 단계는 Phase II 잔여 — GPS 자동 봉우리 매칭, Claude Vision OCR 식별, 누끼/카드 자동 생성, 인스타 공유.
 
 ---
 
@@ -138,6 +139,44 @@ insert into peaks (slug, name_ko, name_en, elevation_m, latitude, longitude, reg
 - Authentication → Providers → **Email** 활성화
 - 개발 중에는 “Confirm email” 토글을 끄면 가입 즉시 로그인 가능
 
+### 2-5. Storage 버킷 (정복 사진)
+
+대시보드 → Storage → **New bucket**.
+
+- 이름: `ascent-photos`
+- Public bucket: 체크 (개발용. 운영에선 signed URL로 전환 권장)
+
+SQL Editor에서 정책 적용:
+
+```sql
+-- 본인 폴더에만 업로드 허용 (path 패턴: <user_id>/<filename>)
+create policy "users insert own ascent photos"
+  on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'ascent-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- 본인 사진 수정/삭제
+create policy "users mutate own ascent photos"
+  on storage.objects for update to authenticated
+  using (
+    bucket_id = 'ascent-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+create policy "users delete own ascent photos"
+  on storage.objects for delete to authenticated
+  using (
+    bucket_id = 'ascent-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- 공개 읽기 (public bucket이면 자동, 명시적으로 추가)
+create policy "public read ascent photos"
+  on storage.objects for select
+  using (bucket_id = 'ascent-photos');
+```
+
 ---
 
 ## 3. 디렉터리 구조
@@ -223,13 +262,14 @@ npm run typecheck    # tsc --noEmit
 
 ## 6. Phase II 로드맵
 
-- 카메라 / 갤러리 선택 (`expo-camera`, `expo-image-picker`)
-- GPS 자동 식별 (`expo-location` + Supabase `ll_to_earth` 근접 검색)
-- Claude Vision으로 봉우리 OCR / 식별
-- 누끼 처리 + 박물관 어감의 인증 카드 자동 생성
-- 인스타그램 공유
-- 산림청 100대 명산 풀 데이터(100개) 시드 CSV
-- 친구 비교, PDF 도감 export, 유료 전환
+- ✅ 갤러리/카메라 사진 선택 (`expo-image-picker`) + EXIF GPS·시각 자동 반영
+- ✅ Supabase Storage 사진 업로드 + `ascents` insert (수동 봉우리 선택)
+- ⏳ GPS 현재 위치 자동 봉우리 매칭 (`expo-location` + `ll_to_earth` 근접)
+- ⏳ Claude Vision으로 봉우리 OCR / 식별
+- ⏳ 누끼 처리 + 박물관 어감의 인증 카드 자동 생성
+- ⏳ 인스타그램 공유
+- ⏳ 산림청 100대 명산 풀 데이터(100개) 시드 CSV
+- ⏳ 친구 비교, PDF 도감 export, 유료 전환
 
 ---
 

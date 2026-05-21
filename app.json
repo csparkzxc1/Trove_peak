@@ -32,7 +32,14 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Trove Peaks는 정복하신 봉우리의 사진을 도감에 기록하기 위해 사진 라이브러리에 접근합니다.",
+          "cameraPermission": "Trove Peaks는 정상에서의 사진을 도감에 기록하기 위해 카메라를 사용합니다."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
