@@ -34,9 +34,11 @@ export default function PeakDetailScreen() {
   const cardRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
   const [useStudio, setUseStudio] = useState(false);
+  const [aspect, setAspect] = useState<'1:1' | '9:16'>('1:1');
   const removeBg = useRemoveBackground();
   const { width: winWidth } = useWindowDimensions();
-  const cardWidth = Math.min(winWidth - 48, 520);
+  // 스토리(9:16)는 세로가 훨씬 기니 미리보기 폭을 더 줄여 줘야 화면 안에 들어온다.
+  const cardWidth = Math.min(winWidth - 48, aspect === '9:16' ? 360 : 520);
 
   const handleShare = async () => {
     if (!peak || !ascent) return;
@@ -231,6 +233,26 @@ export default function PeakDetailScreen() {
                 </Text>
               </View>
 
+              <View
+                style={{
+                  flexDirection: 'row',
+                  borderWidth: 1,
+                  borderColor: COLORS.navy,
+                  marginBottom: 14,
+                }}
+              >
+                <ModeToggleButton
+                  label="FEED · 1:1"
+                  active={aspect === '1:1'}
+                  onPress={() => setAspect('1:1')}
+                />
+                <ModeToggleButton
+                  label="STORY · 9:16"
+                  active={aspect === '9:16'}
+                  onPress={() => setAspect('9:16')}
+                />
+              </View>
+
               <View style={{ alignSelf: 'center' }}>
                 <AscentCard
                   ref={cardRef}
@@ -243,6 +265,7 @@ export default function PeakDetailScreen() {
                   serialNumber={number}
                   width={cardWidth}
                   variant={useStudio && ascent.cutout_url ? 'studio' : 'classic'}
+                  aspect={aspect}
                 />
               </View>
 

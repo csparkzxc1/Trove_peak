@@ -11,7 +11,7 @@ import { useAuthStore } from '@/stores/auth';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useMyAscents } from '@/lib/queries/useAscents';
 import { usePeaks } from '@/lib/queries/usePeaks';
-import { useSearchProfiles } from '@/lib/queries/useProfiles';
+import { useSearchProfiles, useMyProfile } from '@/lib/queries/useProfiles';
 import { exportCollectionToPdf } from '@/lib/pdfExport';
 import { PEAKS_SEED, TOTAL_TARGET } from '@/constants/peaks-seed';
 import { COLORS } from '@/constants/theme';
@@ -20,14 +20,17 @@ export default function ProfileScreen() {
   const session = useAuthStore((s) => s.session);
   const ascents = useMyAscents();
   const peaksQuery = usePeaks();
+  const myProfile = useMyProfile();
   const [exporting, setExporting] = useState(false);
   const [friendQuery, setFriendQuery] = useState('');
   const friendSearch = useSearchProfiles(friendQuery);
+  // profiles 테이블이 진실의 원천. 트리거가 채운 'climber-xxxx'도 여기서 읽힘.
   const myNickname =
-    (session?.user.user_metadata?.nickname as string | undefined) ?? null;
+    myProfile.data?.nickname ??
+    (session?.user.user_metadata?.nickname as string | undefined) ??
+    null;
 
-  const nickname =
-    (session?.user.user_metadata?.nickname as string | undefined) ?? '익명의 등산인';
+  const nickname = myNickname ?? '익명의 등산인';
   const email = session?.user.email ?? '미설정';
   const collected = ascents.data?.length ?? 0;
   const joinedAt = session?.user.created_at

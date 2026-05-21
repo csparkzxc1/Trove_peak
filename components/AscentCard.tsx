@@ -17,6 +17,8 @@ export type AscentCardProps = ViewProps & {
   width?: number;
   // 'studio'는 누끼(cutout) PNG를 어두운 네이비 배경 위에 띄우는 박물관식 변형.
   variant?: 'classic' | 'studio';
+  // '1:1' 인스타 피드(정사각), '9:16' 인스타 스토리(세로).
+  aspect?: '1:1' | '9:16';
 };
 
 function formatKoreanDate(d: Date): string {
@@ -28,7 +30,18 @@ function formatKoreanDate(d: Date): string {
 // 인스타 정사각형(1:1) 비율 인증 카드.
 // react-native-view-shot의 captureRef로 캡처해 공유한다.
 export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
-  { peak, photoUrl, ascendedAt, notes, serialNumber, width = 1080, variant = 'classic', style, ...rest },
+  {
+    peak,
+    photoUrl,
+    ascendedAt,
+    notes,
+    serialNumber,
+    width = 1080,
+    variant = 'classic',
+    aspect = '1:1',
+    style,
+    ...rest
+  },
   ref
 ) {
   const scale = width / 1080;
@@ -38,6 +51,9 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
   const fg = studio ? COLORS.cream : COLORS.navy;
   const sub = studio ? '#9DA4AC' : COLORS.stone;
   const border = studio ? COLORS.gold : COLORS.navy;
+  const story = aspect === '9:16';
+  const height = story ? Math.round(width * (16 / 9)) : width;
+  const photoAspect = story ? 1 : 1.4;
 
   return (
     <View
@@ -47,9 +63,9 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
       style={[
         {
           width,
-          height: width,
+          height,
           backgroundColor: bg,
-          padding: px(56),
+          padding: story ? px(72) : px(56),
         },
         style,
       ]}
@@ -95,9 +111,9 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
 
         <View
           style={{
-            marginTop: px(20),
+            marginTop: px(story ? 28 : 20),
             backgroundColor: studio ? COLORS.navy : COLORS.line,
-            aspectRatio: 1.4,
+            aspectRatio: photoAspect,
             width: '100%',
             overflow: 'hidden',
             borderWidth: px(1),
@@ -134,9 +150,9 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
             variant="serifKr"
             weight="bold"
             style={{
-              fontSize: px(72),
+              fontSize: px(story ? 96 : 72),
               color: fg,
-              lineHeight: px(80),
+              lineHeight: px(story ? 108 : 80),
             }}
           >
             {peak.name_ko}
@@ -224,7 +240,7 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
                 lineHeight: px(32),
                 fontStyle: 'italic',
               }}
-              numberOfLines={2}
+              numberOfLines={story ? 5 : 2}
             >
               "{notes}"
             </Text>
