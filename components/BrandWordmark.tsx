@@ -5,6 +5,7 @@ import { COLORS } from '@/constants/theme';
 export type BrandWordmarkProps = ViewProps & {
   size?: 'sm' | 'md' | 'lg';
   align?: 'left' | 'center';
+  tone?: 'navy' | 'cream';
 };
 
 const SIZES = {
@@ -16,10 +17,12 @@ const SIZES = {
 export function BrandWordmark({
   size = 'md',
   align = 'center',
+  tone = 'navy',
   style,
   ...rest
 }: BrandWordmarkProps) {
   const dim = SIZES[size];
+  const mainColor = tone === 'cream' ? COLORS.cream : COLORS.navy;
   return (
     <View
       {...rest}
@@ -30,7 +33,7 @@ export function BrandWordmark({
         weight="medium"
         style={{
           fontSize: dim.trove,
-          color: COLORS.navy,
+          color: mainColor,
           letterSpacing: dim.trove * 0.18,
         }}
       >

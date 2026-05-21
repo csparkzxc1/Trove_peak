@@ -18,6 +18,7 @@ import { MountainSvg } from '@/components/MountainSvg';
 import { AscentCard } from '@/components/AscentCard';
 import { usePeakById } from '@/lib/queries/usePeaks';
 import { useMyAscentForPeak } from '@/lib/queries/useAscents';
+import { useRemoveBackground } from '@/lib/queries/removeBg';
 import { captureAndShareCard } from '@/lib/share';
 import { PEAKS_SEED } from '@/constants/peaks-seed';
 import { COLORS } from '@/constants/theme';
@@ -32,6 +33,8 @@ export default function PeakDetailScreen() {
   const number = seedIndex >= 0 ? String(seedIndex + 1).padStart(3, '0') : '—';
   const cardRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
+  const [useStudio, setUseStudio] = useState(false);
+  const removeBg = useRemoveBackground();
   const { width: winWidth } = useWindowDimensions();
   const cardWidth = Math.min(winWidth - 48, 520);
 
@@ -45,6 +48,32 @@ export default function PeakDetailScreen() {
     } finally {
       setSharing(false);
     }
+  };
+
+  const handleRemoveBg = () => {
+    if (!ascent?.id || !ascent.photo_url) {
+      Alert.alert('처리할 사진이 없습니다');
+      return;
+    }
+    removeBg.mutate(
+      { ascentId: ascent.id, photoUrl: ascent.photo_url },
+      {
+        onSuccess: () => {
+          setUseStudio(true);
+          Alert.alert(
+            '스튜디오 처리 완료',
+            '봉우리만 도려낸 PNG가 카드에 적용되었습니다.'
+          );
+        },
+        onError: (err) =>
+          Alert.alert(
+            '스튜디오 처리 실패',
+            err instanceof Error
+              ? err.message
+              : 'remove.bg 키와 Edge Function 배포 상태를 확인해 주세요.'
+          ),
+      }
+    );
   };
 
   if (peakQuery.isLoading) {
@@ -206,15 +235,62 @@ export default function PeakDetailScreen() {
                 <AscentCard
                   ref={cardRef}
                   peak={peak}
-                  photoUrl={ascent.photo_url}
+                  photoUrl={
+                    useStudio && ascent.cutout_url ? ascent.cutout_url : ascent.photo_url
+                  }
                   ascendedAt={new Date(ascent.ascended_at)}
                   notes={ascent.notes}
                   serialNumber={number}
                   width={cardWidth}
+                  variant={useStudio && ascent.cutout_url ? 'studio' : 'classic'}
                 />
               </View>
 
-              <View style={{ marginTop: 24 }}>
+              {ascent.cutout_url ? (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    borderWidth: 1,
+                    borderColor: COLORS.navy,
+                    marginTop: 18,
+                  }}
+                >
+                  <ModeToggleButton
+                    label="CLASSIC · 원본"
+                    active={!useStudio}
+                    onPress={() => setUseStudio(false)}
+                  />
+                  <ModeToggleButton
+                    label="STUDIO · 누끼"
+                    active={useStudio}
+                    onPress={() => setUseStudio(true)}
+                  />
+                </View>
+              ) : (
+                <View style={{ marginTop: 18 }}>
+                  <Button
+                    label={removeBg.isPending ? '봉우리 도려내는 중…' : '스튜디오 모드 만들기'}
+                    variant="outline"
+                    size="sm"
+                    disabled={removeBg.isPending}
+                    onPress={handleRemoveBg}
+                  />
+                  <Text
+                    variant="sans"
+                    style={{
+                      textAlign: 'center',
+                      marginTop: 6,
+                      color: COLORS.stone,
+                      fontSize: 10,
+                      lineHeight: 14,
+                    }}
+                  >
+                    배경을 분리해 어두운 박물관 카드로 변환합니다 (remove.bg).
+                  </Text>
+                </View>
+              )}
+
+              <View style={{ marginTop: 18 }}>
                 <Button
                   label={sharing ? '카드 생성 중…' : '인스타그램으로 공유'}
                   size="lg"
@@ -269,6 +345,40 @@ export default function PeakDetailScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function ModeToggleButton({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flex: 1,
+        paddingVertical: 11,
+        alignItems: 'center',
+        backgroundColor: active ? COLORS.navy : pressed ? COLORS.creamDark : 'transparent',
+      })}
+    >
+      <Text
+        variant="mono"
+        weight="medium"
+        style={{
+          fontSize: 10,
+          letterSpacing: 1.6,
+          color: active ? COLORS.cream : COLORS.navy,
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 

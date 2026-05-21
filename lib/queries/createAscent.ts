@@ -12,6 +12,7 @@ export type CreateAscentInput = {
   gpsLat: number | null;
   gpsLng: number | null;
   notes: string | null;
+  isPublic: boolean;
 };
 
 async function resolveRealPeakId(peak: Peak): Promise<string> {
@@ -58,7 +59,7 @@ export function useCreateAscent() {
           gps_lat: input.gpsLat,
           gps_lng: input.gpsLng,
           notes: input.notes,
-          is_public: true,
+          is_public: input.isPublic,
         })
         .select('id, peak_id, ascended_at')
         .single();

@@ -7,6 +7,7 @@ export type AscentRow = {
   peak_id: string;
   ascended_at: string;
   photo_url: string | null;
+  cutout_url: string | null;
   notes: string | null;
 };
 
@@ -19,7 +20,7 @@ export function useMyAscents() {
       if (!isSupabaseConfigured || !userId) return [];
       const { data, error } = await supabase
         .from('ascents')
-        .select('id, peak_id, ascended_at, photo_url, notes')
+        .select('id, peak_id, ascended_at, photo_url, cutout_url, notes')
         .eq('user_id', userId)
         .order('ascended_at', { ascending: false });
       if (error) return [];

@@ -15,6 +15,8 @@ export type AscentCardProps = ViewProps & {
   notes?: string | null;
   serialNumber?: string;
   width?: number;
+  // 'studio'는 누끼(cutout) PNG를 어두운 네이비 배경 위에 띄우는 박물관식 변형.
+  variant?: 'classic' | 'studio';
 };
 
 function formatKoreanDate(d: Date): string {
@@ -26,11 +28,16 @@ function formatKoreanDate(d: Date): string {
 // 인스타 정사각형(1:1) 비율 인증 카드.
 // react-native-view-shot의 captureRef로 캡처해 공유한다.
 export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
-  { peak, photoUrl, ascendedAt, notes, serialNumber, width = 1080, style, ...rest },
+  { peak, photoUrl, ascendedAt, notes, serialNumber, width = 1080, variant = 'classic', style, ...rest },
   ref
 ) {
   const scale = width / 1080;
   const px = (n: number) => n * scale;
+  const studio = variant === 'studio';
+  const bg = studio ? COLORS.navy : COLORS.cream;
+  const fg = studio ? COLORS.cream : COLORS.navy;
+  const sub = studio ? '#9DA4AC' : COLORS.stone;
+  const border = studio ? COLORS.gold : COLORS.navy;
 
   return (
     <View
@@ -41,7 +48,7 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
         {
           width,
           height: width,
-          backgroundColor: COLORS.cream,
+          backgroundColor: bg,
           padding: px(56),
         },
         style,
@@ -51,7 +58,7 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
         style={{
           flex: 1,
           borderWidth: px(1),
-          borderColor: COLORS.navy,
+          borderColor: border,
           padding: px(28),
         }}
       >
@@ -79,7 +86,7 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
             style={{
               fontSize: px(16),
               letterSpacing: px(3),
-              color: COLORS.stone,
+              color: sub,
             }}
           >
             {(peak.list_korea_100 ? '100대 명산' : '봉우리').toUpperCase()}
@@ -89,19 +96,19 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
         <View
           style={{
             marginTop: px(20),
-            backgroundColor: COLORS.line,
+            backgroundColor: studio ? COLORS.navy : COLORS.line,
             aspectRatio: 1.4,
             width: '100%',
             overflow: 'hidden',
             borderWidth: px(1),
-            borderColor: COLORS.navy,
+            borderColor: border,
           }}
         >
           {photoUrl ? (
             <Image
               source={{ uri: photoUrl }}
               style={{ width: '100%', height: '100%' }}
-              resizeMode="cover"
+              resizeMode={studio ? 'contain' : 'cover'}
             />
           ) : (
             <View
@@ -114,7 +121,7 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
               <Text
                 variant="serifEn"
                 weight="italic"
-                style={{ color: COLORS.stone, fontSize: px(28), fontStyle: 'italic' }}
+                style={{ color: sub, fontSize: px(28), fontStyle: 'italic' }}
               >
                 No photo on record.
               </Text>
@@ -128,7 +135,7 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
             weight="bold"
             style={{
               fontSize: px(72),
-              color: COLORS.navy,
+              color: fg,
               lineHeight: px(80),
             }}
           >
@@ -140,7 +147,7 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
             style={{
               marginTop: px(4),
               fontSize: px(28),
-              color: COLORS.stone,
+              color: sub,
               fontStyle: 'italic',
             }}
           >
@@ -163,7 +170,7 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
               style={{
                 fontSize: px(14),
                 letterSpacing: px(2),
-                color: COLORS.stone,
+                color: sub,
               }}
             >
               ELEVATION
@@ -173,7 +180,7 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
               weight="medium"
               style={{
                 fontSize: px(36),
-                color: COLORS.navy,
+                color: fg,
                 marginTop: px(6),
               }}
             >
@@ -187,7 +194,7 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
               style={{
                 fontSize: px(14),
                 letterSpacing: px(2),
-                color: COLORS.stone,
+                color: sub,
               }}
             >
               ASCENDED
@@ -197,7 +204,7 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
               weight="medium"
               style={{
                 fontSize: px(36),
-                color: COLORS.navy,
+                color: fg,
                 marginTop: px(6),
               }}
             >
@@ -213,13 +220,13 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
               weight="regular"
               style={{
                 fontSize: px(22),
-                color: COLORS.ink,
+                color: fg,
                 lineHeight: px(32),
                 fontStyle: 'italic',
               }}
               numberOfLines={2}
             >
-              “{notes}”
+              "{notes}"
             </Text>
           </View>
         ) : (
@@ -236,14 +243,14 @@ export const AscentCard = forwardRef<View, AscentCardProps>(function AscentCard(
             marginTop: px(20),
           }}
         >
-          <BrandWordmark size="sm" align="left" />
+          <BrandWordmark size="sm" align="left" tone={studio ? 'cream' : 'navy'} />
           <Text
             variant="mono"
             weight="medium"
             style={{
               fontSize: px(12),
               letterSpacing: px(2),
-              color: COLORS.stone,
+              color: sub,
             }}
           >
             TROVE PEAKS · VOL. I

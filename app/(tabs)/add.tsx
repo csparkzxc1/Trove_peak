@@ -37,6 +37,7 @@ export default function AddScreen() {
   const [peak, setPeak] = useState<Peak | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [notes, setNotes] = useState('');
+  const [isPublic, setIsPublic] = useState(true);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const createAscent = useCreateAscent();
   const identifyPeak = useIdentifyPeak(peaksQuery.data);
@@ -205,6 +206,7 @@ export default function AddScreen() {
         gpsLat: photo.exifLat,
         gpsLng: photo.exifLng,
         notes: notes.trim() ? notes.trim() : null,
+        isPublic,
       },
       {
         onSuccess: () => {
@@ -218,6 +220,7 @@ export default function AddScreen() {
                   setPhoto(null);
                   setPeak(null);
                   setNotes('');
+                  setIsPublic(true);
                 },
               },
             ]
@@ -455,6 +458,58 @@ export default function AddScreen() {
               }}
             />
           </View>
+
+          <SectionLabel index="05" label="PRIVACY · 공개 범위" style={{ marginTop: 32 }} />
+          <Pressable
+            onPress={() => setIsPublic((v) => !v)}
+            style={({ pressed }) => ({
+              borderWidth: 1,
+              borderColor: isPublic ? COLORS.navy : COLORS.line,
+              padding: 14,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: pressed ? COLORS.creamDark : 'transparent',
+            })}
+          >
+            <View style={{ flex: 1, paddingRight: 14 }}>
+              <Text
+                variant="serifKr"
+                weight="bold"
+                style={{ fontSize: 15, color: COLORS.navy }}
+              >
+                {isPublic ? '다른 등산인이 볼 수 있음' : '나만 보는 비공개'}
+              </Text>
+              <Text
+                variant="sans"
+                style={{ fontSize: 11, color: COLORS.stone, marginTop: 4, lineHeight: 16 }}
+              >
+                {isPublic
+                  ? '닉네임 비교에 봉우리 이름이 노출됩니다. 사진·메모는 비공개로 유지.'
+                  : '도감 비교에서도 보이지 않습니다.'}
+              </Text>
+            </View>
+            <View
+              style={{
+                width: 48,
+                height: 28,
+                borderRadius: 14,
+                backgroundColor: isPublic ? COLORS.navy : COLORS.line,
+                padding: 3,
+                justifyContent: 'center',
+                alignItems: isPublic ? 'flex-end' : 'flex-start',
+              }}
+            >
+              <View
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 11,
+                  backgroundColor: COLORS.cream,
+                }}
+              />
+            </View>
+          </Pressable>
 
           <View style={{ marginTop: 40 }}>
             <Button

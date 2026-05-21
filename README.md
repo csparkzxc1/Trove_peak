@@ -26,10 +26,12 @@
 - ✅ **백두대간 30선 필터** — 도감 메인에서 100대 명산(100) / 백두대간(30) 전환
 - ✅ **PDF 도감 export** — `expo-print`로 표지·목차·봉우리 페이지 A4 PDF 생성 후 시스템 공유
 - ✅ **친구 비교** — 닉네임 검색 + `collection_summary` 뷰로 우리 둘 다·친구만·나만 분리
+- ✅ **공개/비공개 토글** — 등록 시 ascent 단위로 노출 여부 선택
+- ✅ **누끼(스튜디오 모드)** — remove.bg Edge Function으로 배경 분리 → 어두운 박물관 카드 변형
 - ✅ TanStack Query, Zustand, react-native-svg, react-hook-form, zod
 - ✅ TypeScript 에러 0, 웹 번들 검증 통과
 
-다음 단계는 Phase II 잔여 — 봉우리 누끼 처리(remove.bg/WASM), 유료 전환.
+앱은 **무료 베이스**로 운영한다(과금/구독 없음). 다음 후보 — 데이터 정합성 검증, 인스타 스토리 변형 카드, 백두대간 풀 도감 모드.
 
 ---
 
@@ -89,7 +91,7 @@ create table ascents (
   user_id uuid not null references auth.users(id) on delete cascade,
   peak_id uuid not null references peaks(id) on delete restrict,
   photo_url text,
-  photo_processed_url text,
+  cutout_url text,
   card_url text,
   ascended_at timestamptz not null,
   gps_lat double precision,
@@ -98,11 +100,15 @@ create table ascents (
   course_duration_min int,
   weather jsonb,
   notes text,
-  is_public boolean default false,
+  is_public boolean default true,
   created_at timestamptz default now()
 );
 
 create index ascents_user_idx on ascents(user_id, ascended_at desc);
+
+-- 이전 스키마(photo_processed_url, is_public default false)를 이미 적용했다면:
+-- alter table ascents rename column photo_processed_url to cutout_url;
+-- alter table ascents alter column is_public set default true;
 
 alter table peaks enable row level security;
 alter table ascents enable row level security;
@@ -274,6 +280,19 @@ supabase functions deploy identify-peak
 
 > 비용: 사진 1장당 Sonnet 기준 약 $0.005~0.02. Vision 토큰은 해상도가 높을수록 비싸므로 클라이언트에서 `expo-image-picker`의 `quality: 0.85`로 압축해 보낸다.
 
+### 2-8. Edge Function · 누끼(배경 분리)
+
+`supabase/functions/remove-bg/index.ts`는 [remove.bg API](https://www.remove.bg)로 봉우리 사진에서 배경을 분리하고, 결과 PNG를 `ascent-photos` 버킷에 저장한 뒤 `ascents.cutout_url`을 갱신한다. 배포·키 등록 절차:
+
+```bash
+supabase secrets set REMOVEBG_API_KEY=...
+supabase functions deploy remove-bg
+```
+
+이 기능은 *선택*이다. 키가 없거나 함수가 배포되지 않으면 봉우리 상세 화면의 “스튜디오 모드 만들기” 버튼이 친절한 에러를 띄울 뿐, 다른 흐름엔 영향이 없다.
+
+> 비용: remove.bg는 사진 1장당 약 $0.20(또는 매월 50장 무료 플랜). 무료 운영을 유지하려면 사용자에게 “스튜디오 모드” 버튼 노출 자체를 가리거나, 추후 클라이언트 WASM(@imgly/background-removal) 변형을 검토.
+
 ---
 
 ## 3. 디렉터리 구조
@@ -380,8 +399,10 @@ npm run typecheck    # tsc --noEmit
 - ✅ 백두대간 별도 컬렉션 뷰 + 30선 풀 시드
 - ✅ PDF 도감 export (`expo-print`, A4, 표지+목차+봉우리 페이지)
 - ✅ 친구 비교 (닉네임 검색 + 공개 컬렉션 요약 뷰)
-- ⏳ 봉우리 누끼 처리 (배경 분리) — 외부 API(remove.bg) 또는 클라이언트 WASM 평가 중
-- ⏳ 유료 전환 (RevenueCat·Stripe)
+- ✅ 공개/비공개 토글 (등록 시 선택)
+- ✅ 누끼 처리 (remove.bg Edge Function, 옵셔널)
+- ❌ 유료 전환 — 무료 베이스로 운영
+- ⏳ 데이터 정합성 (좌표·표고 국토지리정보원 검증 스크립트)
 
 ---
 
