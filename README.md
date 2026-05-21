@@ -23,11 +23,12 @@
 - ✅ **GPS 자동 봉우리 추천** — EXIF/현재 위치에서 5km 이내 가장 가까운 봉우리 제안(Haversine)
 - ✅ **Claude Vision AI 식별** — Supabase Edge Function `identify-peak`로 봉우리 사진 자동 식별
 - ✅ **인증 카드 + 공유** — 1:1 정사각형 박물관 어감 카드를 `react-native-view-shot`으로 캡처해 시스템 공유 시트(인스타·메시지)로 전송
-- ✅ **백두대간 필터** — 도감 메인에서 100대 명산 / 백두대간 전환
+- ✅ **백두대간 30선 필터** — 도감 메인에서 100대 명산(100) / 백두대간(30) 전환
+- ✅ **PDF 도감 export** — `expo-print`로 표지·목차·봉우리 페이지 A4 PDF 생성 후 시스템 공유
 - ✅ TanStack Query, Zustand, react-native-svg, react-hook-form, zod
 - ✅ TypeScript 에러 0, 웹 번들 검증 통과
 
-다음 단계는 Phase II 잔여 — 봉우리 누끼 처리, 친구 비교, PDF 도감 export, 유료 전환.
+다음 단계는 Phase II 잔여 — 봉우리 누끼 처리(remove.bg/WASM), 친구 비교, 유료 전환.
 
 ---
 
@@ -232,6 +233,7 @@ trove-peaks/
 │   ├── location.ts               # GPS 권한 + Haversine
 │   ├── base64.ts                 # Uint8Array → base64 (RN/Web 호환)
 │   ├── share.ts                  # view-shot 캡처 + expo-sharing
+│   ├── pdfExport.ts              # 도감 PDF (expo-print)
 │   ├── queries/                  # TanStack Query 훅
 │   └── types.ts
 ├── stores/
@@ -300,10 +302,10 @@ npm run typecheck    # tsc --noEmit
 - ✅ 산림청 100대 명산 풀 데이터(100개) 시드
 - ✅ 박물관 어감의 인증 카드 자동 생성 (1:1, view-shot 캡처)
 - ✅ 인스타그램·시스템 공유 시트 (expo-sharing, 웹은 PNG 다운로드)
-- ✅ 백두대간 별도 컬렉션 뷰 (도감 메인 필터)
+- ✅ 백두대간 별도 컬렉션 뷰 + 30선 풀 시드
+- ✅ PDF 도감 export (`expo-print`, A4, 표지+목차+봉우리 페이지)
 - ⏳ 봉우리 누끼 처리 (배경 분리) — 외부 API(remove.bg) 또는 클라이언트 WASM 평가 중
-- ⏳ 백두대간 30선 풀 시드(현재 24개) 보완
-- ⏳ 친구 비교, PDF 도감 export, 유료 전환
+- ⏳ 친구 비교, 유료 전환
 
 ---
 

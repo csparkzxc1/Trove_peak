@@ -138,6 +138,14 @@ const RAW: SeedRow[] = [
   // 기타 100대 명산
   ['yeoninsan', '연인산', 'Yeoninsan', 1068, 37.9389, 127.4172, '경기도', '경기', '중', true, false],
   ['myeongseongsan', '명성산', 'Myeongseongsan', 922, 38.1281, 127.2911, '경기도', '경기', '중', true, false],
+
+  // 백두대간 30선 보강 (100대 명산엔 포함되지 않지만 주능선 봉우리)
+  ['nogodan', '노고단', 'Nogodan', 1507, 35.2742, 127.4942, '전라남도', '전남', '중', false, true],
+  ['banyabong', '반야봉', 'Banyabong', 1732, 35.3092, 127.5825, '전북특별자치도', '전북', '상', false, true],
+  ['hyangnobong', '향로봉', 'Hyangnobong', 1296, 38.3631, 128.2722, '강원특별자치도', '강원', '상', false, true],
+  ['maebongsan-tb', '매봉산', 'Maebongsan', 1303, 37.1786, 128.9533, '강원특별자치도', '강원', '중', false, true],
+  ['durobong', '두로봉', 'Durobong', 1422, 37.7833, 128.5444, '강원특별자치도', '강원', '중', false, true],
+  ['galjeongokbong', '갈전곡봉', 'Galjeongokbong', 1240, 37.9869, 128.4197, '강원특별자치도', '강원', '중', false, true],
 ];
 
 export const PEAKS_SEED: PeakSeed[] = RAW.map(
